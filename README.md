@@ -18,10 +18,12 @@ The API is disabled by default and binds to `127.0.0.1` by default. It requires 
 
 ## Install on Windows
 
-1. Build or download the Windows x64 package from CI.
-2. Close OBS Studio 32.x.
-3. Extract `broadcast-scheduler-0.1.0-windows-x64.zip` into the OBS installation root, normally `C:\Program Files\obs-studio`, preserving `obs-plugins`, `data` and `bin` paths.
+1. Download `Broadcast-Scheduler-0.1.0-Setup.exe` from the CI artifact.
+2. Close OBS Studio 32.x and run the installer. Windows may ask for administrator approval because OBS is normally installed under `Program Files`.
+3. Select the OBS installation folder if it is not detected automatically. The installer validates that the folder contains the 64-bit OBS executable.
 4. Start OBS and use `Docks → Broadcast Scheduler`. The plugin also opens the dock on first load; it can be hidden and restored from the Docks menu.
+
+The ZIP `broadcast-scheduler-0.1.0-windows-x64.zip` remains available for portable OBS installations or manual deployment. The installer does not remove the scheduler database, history or settings when uninstalled.
 
 The package contains the plugin DLL, locale files, bundled libical timezone data and only the extra Qt modules needed by this plugin. It must use the same Qt ABI as the OBS installation. Rebuild after an OBS Qt upgrade. The database path is shown in Settings → Advanced and is normally `%APPDATA%\obs-studio\plugin_config\broadcast-scheduler\scheduler.sqlite3`.
 

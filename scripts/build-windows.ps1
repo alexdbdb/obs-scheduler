@@ -1,4 +1,7 @@
-param([string]$Configuration = 'Release')
+param(
+  [string]$Configuration = 'Release',
+  [switch]$SkipInstaller
+)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 $repo = Split-Path $PSScriptRoot -Parent
@@ -79,4 +82,12 @@ foreach ($dll in @('Qt6HttpServer.dll','Qt6WebSockets.dll')) { Copy-Item "$qt/bi
 Copy-Item "$repo/LICENSE", "$repo/THIRD_PARTY.md" "$stage/data/obs-plugins/broadcast-scheduler/"
 Copy-Item "$ical/LICENSE" "$stage/data/obs-plugins/broadcast-scheduler/LICENSE-libical" -ErrorAction SilentlyContinue
 Compress-Archive -Force "$stage/*" "$repo/artifacts/broadcast-scheduler-0.1.0-windows-x64.zip"
+if (!$SkipInstaller) {
+  $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+  if (!$iscc) {
+    throw 'Inno Setup 6 is required to create the user-friendly installer. Install it or pass -SkipInstaller.'
+  }
+  Run $iscc.Source @('/Qp', (Join-Path $repo 'installer/BroadcastScheduler.iss'))
+  Write-Host "Installer ready: artifacts/Broadcast-Scheduler-0.1.0-Setup.exe"
+}
 Write-Host "Package ready: artifacts/broadcast-scheduler-0.1.0-windows-x64.zip (Qt $qtVersion)"

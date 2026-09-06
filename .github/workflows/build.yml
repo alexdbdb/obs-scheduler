@@ -11,13 +11,18 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
       - name: Build OBS SDK, plugin, tests and package
         shell: pwsh
         run: ./scripts/build-windows.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: broadcast-scheduler-windows-x64
-          path: artifacts/broadcast-scheduler-0.1.0-windows-x64.zip
+          path: |
+            artifacts/broadcast-scheduler-0.1.0-windows-x64.zip
+            artifacts/Broadcast-Scheduler-0.1.0-Setup.exe
   linux:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

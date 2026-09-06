@@ -2,7 +2,7 @@
 
 ## Windows 10/11 x64, OBS 32.x
 
-Install Visual Studio 2022 with Desktop development with C++, Windows 10/11 SDK, CMake 3.30+, Ninja, Git, PowerShell 7 and Perl (required by libical's code generation). Open **Developer PowerShell for VS 2022** with x64 tools. Run:
+Install Visual Studio 2022 with Desktop development with C++, Windows 10/11 SDK, CMake 3.30+, Ninja, Git, PowerShell 7, Perl (required by libical's code generation) and Inno Setup 6. Open **Developer PowerShell for VS 2022** with x64 tools. Run:
 
 ```powershell
 git clone <YOUR_REPOSITORY_URL>/obs-broadcast-scheduler.git
@@ -10,7 +10,9 @@ cd obs-broadcast-scheduler
 pwsh -File scripts/build-windows.ps1
 ```
 
-The script pins OBS 32.0.4 as the 32.x baseline, downloads hash-verified official OBS/Qt dependency archives, builds libobs/frontend SDK with the same pattern as OBS's official plugin template, builds libical/SQLite and any missing Qt HTTP modules, compiles the plugin, runs tests and assembles `artifacts/broadcast-scheduler-0.1.0-windows-x64.zip`. No full OBS executable build is required for the SDK. Internet access and several GB of disk space are required. CI performs these steps on windows-2022. This Linux development environment cannot locally execute that Windows toolchain; CI must pass before publishing a Windows binary.
+The script pins OBS 32.0.4 as the 32.x baseline, downloads hash-verified official OBS/Qt dependency archives, builds libobs/frontend SDK with the same pattern as OBS's official plugin template, builds libical/SQLite and any missing Qt HTTP modules, compiles the plugin, runs tests and assembles both `artifacts/broadcast-scheduler-0.1.0-windows-x64.zip` and the user-friendly `artifacts/Broadcast-Scheduler-0.1.0-Setup.exe`. No full OBS executable build is required for the SDK. Internet access and several GB of disk space are required. CI installs Inno Setup and performs these steps on windows-2022. This Linux development environment cannot locally execute that Windows toolchain; CI must pass before publishing a Windows binary.
+
+To build only the portable ZIP when Inno Setup is unavailable, pass `-SkipInstaller` to the script. The installer source is [installer/BroadcastScheduler.iss](../installer/BroadcastScheduler.iss); it detects common OBS install locations, validates `obs64.exe`, copies the plugin/runtime files and leaves the user database intact during uninstall.
 
 Close OBS. Extract the ZIP into the **OBS installation root**, normally `C:\Program Files\obs-studio`, preserving paths:
 
