@@ -29,7 +29,8 @@ if(WIN32)
   # upstream config target does not propagate the static-header define, so
   # without this the headers annotate every symbol as __declspec(dllimport)
   # and MSVC/MinGW link fails with unresolved __imp_* symbols.
-  target_compile_definitions(scheduler-core PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN LIBICAL_STATIC)
+  target_compile_definitions(scheduler-core PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN
+    LIBICAL_ICAL_STATIC_DEFINE)
   target_link_libraries(scheduler-core PRIVATE Crypt32)
 elseif(APPLE)
   target_link_libraries(scheduler-core PRIVATE "-framework Security" "-framework CoreFoundation")
