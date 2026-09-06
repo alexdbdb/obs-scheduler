@@ -1,0 +1,6 @@
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates software-properties-common && add-apt-repository -y ppa:obsproject/obs-studio
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config git curl qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite libical-dev libsqlite3-dev libsecret-1-dev libsimde-dev obs-studio xvfb xauth libgl1-mesa-dri dbus-x11 qt6-tools-dev-tools && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch 32.2.2 https://github.com/obsproject/obs-studio.git /opt/obs-src
+WORKDIR /work

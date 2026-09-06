@@ -1,0 +1,7 @@
+build*/
+.deps/
+artifacts/
+*.sqlite*
+*.user
+credentials*.json
+__pycache__/

@@ -1,0 +1,32 @@
+name: Build and test
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build OBS SDK, plugin, tests and package
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: broadcast-scheduler-windows-x64
+          path: artifacts/broadcast-scheduler-0.1.0-windows-x64.zip
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f Dockerfile.dev -t broadcast-scheduler-dev .
+      - name: Compile and test against real OBS 32
+        run: docker run --rm -v "$PWD:/work" broadcast-scheduler-dev bash -lc 'cmake -S . -B build -G Ninja -DOBS_SOURCE_DIR=/opt/obs-src -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2 && ctest --test-dir build --output-on-failure'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: broadcast-scheduler-linux
+          path: build/broadcast-scheduler.so
