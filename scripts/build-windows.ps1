@@ -24,9 +24,21 @@ function Archive([string]$Url, [string]$File, [string]$Destination, [string]$Has
 $obsTag = '32.2.2'
 $obs = Join-Path $deps "obs-studio-$obsTag"
 if (!(Test-Path $obs)) { Run git @('clone','--depth','1','--branch',$obsTag,'https://github.com/obsproject/obs-studio.git',$obs) }
-$spec = Get-Content (Join-Path $obs 'buildspec.json') -Raw | ConvertFrom-Json
+$legacySpec = Join-Path $obs 'buildspec.json'
+if (Test-Path $legacySpec) {
+  $dependencyData = (Get-Content $legacySpec -Raw | ConvertFrom-Json).dependencies
+} else {
+  # OBS 32.2 moved dependency metadata into the hidden `dependencies`
+  # configure preset in CMakePresets.json.
+  $presetData = Get-Content (Join-Path $obs 'CMakePresets.json') -Raw | ConvertFrom-Json
+  $dependencyPreset = $presetData.configurePresets |
+    Where-Object { $_.name -eq 'dependencies' } |
+    Select-Object -First 1
+  $dependencyData = $dependencyPreset.vendor.'obsproject.com/obs-studio'.dependencies
+}
+if (!$dependencyData) { throw 'Cannot find OBS dependency metadata' }
 foreach ($kind in @('prebuilt','qt6')) {
-  $dep = $spec.dependencies.$kind
+  $dep = $dependencyData.$kind
   $part = if ($kind -eq 'qt6') { 'qt6-' } else { '' }
   $file = "windows-deps-$part$($dep.version)-x64.zip"
   $destination = Join-Path $deps $kind
