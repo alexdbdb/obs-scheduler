@@ -25,7 +25,11 @@ add_library(scheduler-core STATIC
 target_include_directories(scheduler-core PUBLIC src)
 target_link_libraries(scheduler-core PUBLIC Qt6::Core Qt6::Network Qt6::HttpServer Qt6::Concurrent SQLite::SQLite3 ${ICAL_TARGET})
 if(WIN32)
-  target_compile_definitions(scheduler-core PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
+  # The Windows packaging script builds libical with STATIC_ONLY=ON. The
+  # upstream config target does not propagate the static-header define, so
+  # without this the headers annotate every symbol as __declspec(dllimport)
+  # and MSVC/MinGW link fails with unresolved __imp_* symbols.
+  target_compile_definitions(scheduler-core PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN LIBICAL_STATIC)
   target_link_libraries(scheduler-core PRIVATE Crypt32)
 elseif(APPLE)
   target_link_libraries(scheduler-core PRIVATE "-framework Security" "-framework CoreFoundation")
