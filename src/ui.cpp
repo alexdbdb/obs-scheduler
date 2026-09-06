@@ -19,14 +19,31 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <utility>
 #include <obs-module.h>
 namespace bs {
 QString tr(const char *key) { return QString::fromUtf8(obs_module_text(key)); }
 namespace {
+template <typename Function>
+void runUiHandler(QWidget *parent, const char *context, Function &&function) {
+  try {
+    function();
+  } catch (const std::exception &e) {
+    blog(LOG_ERROR, "[broadcast-scheduler] UI handler '%s' failed: %s", context,
+         e.what());
+    QMessageBox::critical(parent, tr("Error"), QString::fromUtf8(e.what()));
+  } catch (...) {
+    blog(LOG_ERROR, "[broadcast-scheduler] UI handler '%s' failed with an unknown exception",
+         context);
+    QMessageBox::critical(parent, tr("Error"), tr("InternalError"));
+  }
+}
 QPushButton *button(QBoxLayout *l, const char *key, std::function<void()> fn) {
   auto *b = new QPushButton(tr(key));
   l->addWidget(b);
-  QObject::connect(b, &QPushButton::clicked, b, fn);
+  QObject::connect(b, &QPushButton::clicked, b, [b, key, fn = std::move(fn)] {
+    runUiHandler(b, key, fn);
+  });
   return b;
 }
 QTableWidget *table(QStringList headers) {
@@ -197,7 +214,9 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
         return;
       send("action", {{"type", item.second}});
     });
-  connect(runtime, &Runtime::state, this, &Dock::updateState);
+  connect(runtime, &Runtime::state, this, [this](QJsonObject data) {
+    runUiHandler(this, "state", [this, data] { updateState(data); });
+  });
   connect(runtime, &Runtime::problem, this,
           [this](QString m) { QMessageBox::warning(this, tr("Error"), m); });
   connect(runtime, &Runtime::ask, this, &Dock::safetyQuestion);
@@ -317,8 +336,14 @@ void Dock::updateState(QJsonObject data) {
         agenda->item(agenda->currentRow(), 0)->data(Qt::UserRole).toString();
   agenda->setRowCount(0);
   QList<Event> ordered;
-  for (auto v : data["events"].toArray())
-    ordered.append(Event::parse(v.toObject()));
+  for (auto v : data["events"].toArray()) {
+    try {
+      ordered.append(Event::parse(v.toObject()));
+    } catch (const std::exception &e) {
+      blog(LOG_ERROR, "[broadcast-scheduler] Ignoring invalid event in UI: %s",
+           e.what());
+    }
+  }
   std::sort(ordered.begin(), ordered.end(),
             [](const Event &a, const Event &b) { return a.start < b.start; });
   for (auto &e : ordered) {
@@ -363,14 +388,20 @@ void Dock::renderCalendar() {
   }
   for (auto v : current["events"].toArray()) {
     auto e = v.toObject();
-    auto start =
-        instant(e["start"].toString()).toTimeZone(QTimeZone(zone.toUtf8()));
-    auto finish =
-        instant(e["end"].toString()).toTimeZone(QTimeZone(zone.toUtf8()));
-    if (mode == "Agenda" || (start.date() < end && finish.date() >= begin))
-      row(calendarEvents,
-          {e["title"].toString(), display(e["start"].toString(), zone),
-           display(e["end"].toString(), zone)});
+    try {
+      auto start =
+          instant(e["start"].toString()).toTimeZone(QTimeZone(zone.toUtf8()));
+      auto finish =
+          instant(e["end"].toString()).toTimeZone(QTimeZone(zone.toUtf8()));
+      if (mode == "Agenda" || (start.date() < end && finish.date() >= begin))
+        row(calendarEvents,
+            {e["title"].toString(), display(e["start"].toString(), zone),
+             display(e["end"].toString(), zone)});
+    } catch (const std::exception &ex) {
+      blog(LOG_ERROR,
+           "[broadcast-scheduler] Ignoring invalid calendar event in UI: %s",
+           ex.what());
+    }
   }
 }
 void Dock::eventDialog(QJsonObject e, bool duplicate) {
