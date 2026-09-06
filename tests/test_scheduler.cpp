@@ -36,9 +36,13 @@ private slots:
     auto round = Event::parse(e.json());
     QCOMPARE(round.start, e.start);
     QCOMPARE(round.timezone, e.timezone);
+    for (const auto value : {0LL, 1789066800123LL, now()})
+      QCOMPARE(instant(iso(value)).toMSecsSinceEpoch(), value);
     QVERIFY_EXCEPTION_THROWN(instant("2026-01-01T12:00:00"), Error);
     QCOMPARE(instant("2026-09-10T21:00:00+02:00"),
              instant("2026-09-10T19:00:00Z"));
+    QCOMPARE(instant("2026-09-10T19:00:00+0200"),
+             instant("2026-09-10T17:00:00Z"));
   }
   void overnight() {
     auto e = Event::parse({{"title", "Night"},

@@ -11,9 +11,29 @@ QString iso(qint64 ms) {
       .toString(Qt::ISODateWithMs);
 }
 QDateTime instant(const QString &s) {
-  static QRegularExpression offset("(Z|[+-][0-9]{2}:[0-9]{2})$");
-  auto d = QDateTime::fromString(s, Qt::ISODateWithMs);
-  if (!d.isValid() || !offset.match(s).hasMatch())
+  const auto text = s.trimmed();
+  static QRegularExpression offset("(Z|z|[+-][0-9]{2}:?[0-9]{2})$");
+  if (!offset.match(text).hasMatch())
+    throw Error("Datetime must be ISO 8601 with Z or an explicit offset");
+
+  // Qt accepts the ISO form with milliseconds on most platforms, but the
+  // parser has historically been stricter about fractional seconds and
+  // compact numeric offsets on some Windows/Qt combinations. Normalize the
+  // harmless variants before parsing and fall back to ISODate for values
+  // without a fractional part.
+  auto normalized = text;
+  if (normalized.endsWith('z'))
+    normalized[normalized.size() - 1] = 'Z';
+  static QRegularExpression compactOffset("([+-][0-9]{2})([0-9]{2})$");
+  const auto compact = compactOffset.match(normalized);
+  if (compact.hasMatch())
+    normalized.replace(compact.capturedStart(), compact.capturedLength(),
+                       compact.captured(1) + ":" + compact.captured(2));
+
+  auto d = QDateTime::fromString(normalized, Qt::ISODateWithMs);
+  if (!d.isValid())
+    d = QDateTime::fromString(normalized, Qt::ISODate);
+  if (!d.isValid())
     throw Error("Datetime must be ISO 8601 with Z or an explicit offset");
   return d.toUTC();
 }
