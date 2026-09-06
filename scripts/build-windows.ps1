@@ -18,8 +18,10 @@ function Archive([string]$Url, [string]$File, [string]$Destination, [string]$Has
   New-Item -ItemType Directory -Force $Destination | Out-Null
   Expand-Archive -Force $File $Destination
 }
-# Build against the beginning of the OBS 32 series. OBS provides the Qt ABI.
-$obsTag = '32.0.4'
+# Build against the current OBS 32 baseline used for the Windows package.
+# Keeping this aligned with the current OBS 32 Qt runtime avoids loading a
+# QtHttpServer/WebSockets module built against a different Qt minor release.
+$obsTag = '32.2.2'
 $obs = Join-Path $deps "obs-studio-$obsTag"
 if (!(Test-Path $obs)) { Run git @('clone','--depth','1','--branch',$obsTag,'https://github.com/obsproject/obs-studio.git',$obs) }
 $spec = Get-Content (Join-Path $obs 'buildspec.json') -Raw | ConvertFrom-Json

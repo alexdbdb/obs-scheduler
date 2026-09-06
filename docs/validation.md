@@ -20,4 +20,4 @@ cmake --build build -j2
 python3 tests/obs_smoke.py
 ```
 
-The Windows build and the Google Calendar OAuth flow cannot be fully validated on this Linux host. Windows uses the pinned official OBS 32.0.4 SDK/dependency workflow in CI. Google requires a developer-owned Desktop OAuth client, consent screen/test user and browser authorization; no credentials are present in this repository. Production qualification must additionally cover encoder/device failures, sleep/wake, system clock changes, ambiguous DST folds and unattended recovery.
+The Windows build and the Google Calendar OAuth flow cannot be fully validated on this Linux host. Windows uses the pinned official OBS 32.2.2 SDK/dependency workflow in CI, matching the current OBS 32.2.x Qt runtime. Google requires a developer-owned Desktop OAuth client, consent screen/test user and browser authorization; no credentials are present in this repository. Production qualification must additionally cover encoder/device failures, sleep/wake, system clock changes, ambiguous DST folds and unattended recovery.
