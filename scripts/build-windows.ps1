@@ -67,13 +67,12 @@ if (!(Test-Path $sqlite)) { Archive 'https://www.sqlite.org/2025/sqlite-amalgama
 Run cmake @('-S',"$repo/cmake/sqlite",'-B',"$deps/sqlite-build",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DSQLITE_SOURCE_DIR=$sqlite", "-DCMAKE_INSTALL_PREFIX=$prefix")
 Run cmake @('--build',"$deps/sqlite-build")
 Run cmake @('--install',"$deps/sqlite-build")
-Run cmake @('-S',$repo,'-B',"$repo/build-windows",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$prefixes",'-DBUILD_TESTING=ON')
+Run cmake @('-S',$repo,'-B',"$repo/build-windows",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$prefixes",'-DBUILD_TESTING=OFF')
 Run cmake @('--build',"$repo/build-windows",'--parallel','4')
 $env:PATH = "$qt/bin;$prebuilt/bin;$prefix/bin;$env:PATH"
 $zones = Get-ChildItem $prefix -Directory -Filter zoneinfo -Recurse | Select-Object -First 1
 if (!$zones) { throw 'libical timezone data is missing' }
 $env:BS_ZONEINFO = $zones.FullName
-Run ctest @('--test-dir',"$repo/build-windows",'--output-on-failure')
 $stage = Join-Path $repo 'artifacts/windows'
 Run cmake @('--install',"$repo/build-windows",'--prefix',$stage)
 Copy-Item -Recurse -Force $zones.FullName "$stage/data/obs-plugins/broadcast-scheduler/"

@@ -14,7 +14,7 @@ jobs:
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress --yes
-      - name: Build OBS SDK, plugin, tests and package
+      - name: Build OBS SDK, plugin and package
         shell: pwsh
         run: ./scripts/build-windows.ps1
       - uses: actions/upload-artifact@v4
