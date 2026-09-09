@@ -6,6 +6,12 @@ Schedule the start and end of OBS recordings from manual events, recurring event
 
 **Prerelease 0.1.0.** Windows recording start/stop has been tested locally and confirmed by a user. Google authorization with a real account and unattended operation under failure conditions remain to be qualified. See [validation](docs/validation.md).
 
+## Download / Descargar
+
+**[Download Windows installer (.exe) / Descargar instalador para Windows](https://github.com/alexdbdb/obs-scheduler/releases/download/v0.1.0/Broadcast-Scheduler-0.1.0-Setup.exe)**
+
+Close OBS, run the installer, and reopen OBS. No source-code download or compilation is needed. See [release notes](https://github.com/alexdbdb/obs-scheduler/releases/tag/v0.1.0) for compatibility and limitations. While the repository is private, downloads require signing in with an account that has access.
+
 ## Scope
 
 - Manual schedules with a title, start, end and enabled state.
@@ -21,12 +27,12 @@ The plugin uses the device timezone for manual times and display. It does not pr
 
 Builds target **OBS 32.2.2 x64 with Qt 6.11.1**. Other OBS/Qt combinations are not validated.
 
-1. Open a successful Windows run under [Actions](https://github.com/alexdbdb/obs-scheduler/actions/workflows/build.yml) and download its Windows artifact (GitHub sign-in may be required).
+1. Download the [Windows installer](https://github.com/alexdbdb/obs-scheduler/releases/download/v0.1.0/Broadcast-Scheduler-0.1.0-Setup.exe) from [Releases](https://github.com/alexdbdb/obs-scheduler/releases/tag/v0.1.0).
 2. Close OBS and run `Broadcast-Scheduler-0.1.0-Setup.exe`.
 3. Select the OBS installation directory and restart OBS.
 4. Open **Docks → Broadcast Scheduler**.
 
-The portable ZIP can instead be extracted into the OBS installation directory, preserving its paths. Uninstalling the plugin retains its database and settings.
+For developers, a portable ZIP is also available in successful [Actions builds](https://github.com/alexdbdb/obs-scheduler/actions/workflows/build.yml). It can be extracted into the OBS installation directory, preserving its paths. Uninstalling the plugin retains its database and settings.
 
 Public CI builds do **not** include a Google OAuth client. Manual schedules, recurrences, ICS and the API work without Google. Distributors can follow the [Google registration guide in Spanish](docs/registro-google.md) to build a Google-enabled installer. Ordinary users do not enter client IDs or secrets.
 
