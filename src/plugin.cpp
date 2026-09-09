@@ -18,7 +18,7 @@ MODULE_EXPORT const char *obs_module_name(void) {
   return "Broadcast Scheduler";
 }
 MODULE_EXPORT const char *obs_module_author(void) {
-  return "AUTHOR_NAME (replace before publishing)";
+  return "alexdbdb and Broadcast Scheduler contributors";
 }
 namespace {
 QThread *worker = nullptr;

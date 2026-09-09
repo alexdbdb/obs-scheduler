@@ -3,7 +3,7 @@
 
 #define ProductName "Broadcast Scheduler"
 #define ProductVersion "0.1.0"
-#define ProductPublisher "AUTHOR_NAME"
+#define ProductPublisher "alexdbdb and contributors"
 #define StageDir "..\artifacts\windows"
 
 [Setup]
@@ -23,7 +23,7 @@ OutputBaseFilename=Broadcast-Scheduler-{#ProductVersion}-Setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-LicenseFile=..\LICENSE
+LicenseFile=..\licenses\GPL-3.0.txt
 Uninstallable=yes
 UninstallFilesDir={app}\uninstall\Broadcast Scheduler
 CloseApplications=yes

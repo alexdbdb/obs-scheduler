@@ -21,6 +21,9 @@ class Providers : public QObject {
   QByteArray access, verifier, state;
   qint64 accessExpires = 0;
   QString redirect;
+  quint64 googleGeneration = 0;
+  bool connecting = false;
+  QJsonObject googleClient() const;
   QHash<QTcpSocket *, QByteArray> callbacks;
   void request(const QUrl &url, const QByteArray &bearer,
                std::function<void(QByteArray, QString)> done);
@@ -39,6 +42,7 @@ public:
   void connectGoogle();
   void disconnectGoogle();
   void listGoogle();
+  QJsonObject googleStatus() const;
 signals:
   void changed();
   void problem(QString message);

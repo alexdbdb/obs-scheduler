@@ -4,4 +4,9 @@ artifacts/
 *.sqlite*
 *.user
 credentials*.json
+client_secret*.json
+google-client*.json
 __pycache__/
+*.dpapi
+.env
+.env.*

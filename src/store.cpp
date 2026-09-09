@@ -73,7 +73,7 @@ Store::Store(const QString &path) {
         "NOT NULL,level TEXT NOT NULL,message TEXT NOT NULL); PRAGMA "
         "user_version=1; COMMIT;");
   run("UPDATE executions SET result='indeterminate',message='OBS exited after "
-      "durable claim; not replayed automatically' WHERE result='claimed'");
+      "durable claim; not replayed automatically' WHERE result IN ('claimed','requested')");
 }
 Store::~Store() {
   if (db)
@@ -197,10 +197,19 @@ void Store::config(const QString &k, const QJsonObject &v) {
       {k, compact(v)});
 }
 bool Store::claim(const Due &d) {
-  run("INSERT OR IGNORE INTO executions VALUES(?,?,?,?,?,?,?,?)",
-      {d.key(), d.event.id, d.event.title, d.action.type, d.time, now(),
-       "claimed", ""});
-  return sqlite3_changes(db) == 1;
+  sql("BEGIN IMMEDIATE");
+  try {
+    run("INSERT OR IGNORE INTO executions VALUES(?,?,?,?,?,?,?,?)",
+        {d.key(), d.event.id, d.event.title, d.action.type, d.time, now(), "claimed", ""});
+    const bool inserted = sqlite3_changes(db) == 1;
+    if (inserted && d.action.type == "record.start")
+      config("recording/" + d.event.id, d.event.json());
+    sql("COMMIT");
+    return inserted;
+  } catch (...) {
+    sql("ROLLBACK");
+    throw;
+  }
 }
 bool Store::finished(const QString &k) const {
   return !query("SELECT key FROM executions WHERE key=?", {k}).isEmpty();
@@ -209,6 +218,8 @@ void Store::finish(const QString &k, const QString &r, const QString &m) {
   run("UPDATE executions SET actual=?,result=?,message=? WHERE key=?",
       {now(), r, m, k});
   run("DELETE FROM deferred WHERE key=?", {k});
+  if (k.endsWith("/record.stop"))
+    run("DELETE FROM config WHERE key=?", {"recording/" + k.left(k.size() - QString("/record.stop").size())});
 }
 void Store::defer(const Due &d, qint64 until, const QString &state) {
   run("INSERT INTO deferred VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET "

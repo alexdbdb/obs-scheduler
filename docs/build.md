@@ -1,49 +1,70 @@
 # Building and installing
 
-## Windows 10/11 x64, OBS 32.x
+## Windows: clean build
 
-Install Visual Studio 2022 with Desktop development with C++, Windows 10/11 SDK, CMake 3.30+, Ninja, Git, PowerShell 7, Perl (required by libical's code generation) and Inno Setup 6. Open **Developer PowerShell for VS 2022** with x64 tools. Run:
+Requirements: Visual Studio 2022 C++ x64 tools, Windows SDK, CMake 3.30 or newer, Ninja, Git, Perl, Python 3, PowerShell 7 and Inno Setup 6. Open an x64 Developer PowerShell:
 
 ```powershell
-git clone <YOUR_REPOSITORY_URL>/obs-broadcast-scheduler.git
-cd obs-broadcast-scheduler
+git clone https://github.com/alexdbdb/obs-scheduler.git
+cd obs-scheduler
 pwsh -File scripts/build-windows.ps1
 ```
 
-The script pins OBS 32.2.2 as the 32.x baseline, downloads hash-verified official OBS/Qt dependency archives, builds libobs/frontend SDK with the same pattern as OBS's official plugin template, builds libical/SQLite and any missing Qt HTTP modules, compiles the plugin and assembles both `artifacts/broadcast-scheduler-0.1.0-windows-x64.zip` and the user-friendly `artifacts/Broadcast-Scheduler-0.1.0-Setup.exe`. The official OBS Qt SDK archive does not include Qt6Test, so the Windows packaging build disables the QtTest target; the full scheduler/API test suite runs in the Linux CI job. No full OBS executable build is required for the SDK. Internet access and several GB of disk space are required. CI installs Inno Setup and performs these steps on windows-2022. This Linux development environment cannot locally execute that Windows toolchain; CI must pass before publishing a Windows binary.
+The script pins OBS 32.2.2, reads its dependency metadata and verifies the official prebuilt and Qt SDK archive hashes. It builds the OBS development libraries (not the OBS application), missing matching Qt HTTP/WebSockets/Test modules, libical 3.0.20 and SQLite 3.50.4. The plugin and tests are then built; packaging runs only after tests pass.
 
-To build only the portable ZIP when Inno Setup is unavailable, pass `-SkipInstaller` to the script. The installer source is [installer/BroadcastScheduler.iss](../installer/BroadcastScheduler.iss); it detects common OBS install locations, validates `obs64.exe`, copies the plugin/runtime files and leaves the user database intact during uninstall.
+Artifacts:
+- `artifacts/Broadcast-Scheduler-0.1.0-Setup.exe`
+- `artifacts/broadcast-scheduler-0.1.0-windows-x64.zip`
 
-Close OBS. Extract the ZIP into the **OBS installation root**, normally `C:\Program Files\obs-studio`, preserving paths:
+Internet access and several GB of free space are needed on the first build. Build caches and downloads live in `.deps` and are ignored by Git. Use `-SkipInstaller` for ZIP-only packaging.
 
-```text
-obs-studio/
-  obs-plugins/64bit/broadcast-scheduler.dll
-  data/obs-plugins/broadcast-scheduler/locale/en-US.ini
-  data/obs-plugins/broadcast-scheduler/locale/es-ES.ini
-  data/obs-plugins/broadcast-scheduler/zoneinfo/...
-  bin/64bit/Qt6HttpServer.dll
-  bin/64bit/Qt6WebSockets.dll
+## Windows: use an existing OBS installation
+
+When matching headers are already cached in `.deps/obs-studio-32.2.2`, the helper initializes VS 2022 and generates import libraries from installed OBS DLLs:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installed-obs.ps1
 ```
 
-The extra Qt modules must match OBS's Qt build. Do **not** overwrite Qt Core/Gui/Widgets or libobs with SDK copies. When OBS upgrades its Qt ABI, rebuild against that OBS SDK. Restart OBS, enable **Docks → Broadcast Scheduler**, inspect Help → Log Files → View Current Log for `[broadcast-scheduler]`. Uninstall by removing only these plugin-specific files; keep the user database unless deliberately retiring its history. User state normally lives at `%APPDATA%\obs-studio\plugin_config\broadcast-scheduler\scheduler.sqlite3`; the authoritative path is shown in Settings → Advanced.
+The default installation path is `C:\Program Files\obs-studio`; override it with `-OBSPath`. This path was tested with OBS 32.2.2 and Qt 6.11.1. The helper does not rebuild OBS. Other dependencies still have to be available or downloaded. If the matching header checkout is absent, the underlying script obtains it.
 
-## Reproducible Linux development
+To enable Google for a distribution, pass the downloaded Desktop client JSON:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installed-obs.ps1 -GoogleClientFile .deps/google-client.json
+```
+
+The clean-build script accepts the same `-GoogleClientFile` option. CMake users can set `GOOGLE_OAUTH_CLIENT_FILE`. Builds without it omit the bundled client and explain that Google is not configured. Never commit credential JSON or account tokens. See the [registration guide](registro-google.md).
+
+## Package contents
+
+Close OBS before installing. The ZIP preserves these paths:
+
+```text
+obs-plugins/64bit/broadcast-scheduler.dll
+data/obs-plugins/broadcast-scheduler/locale/...
+data/obs-plugins/broadcast-scheduler/zoneinfo/...
+data/obs-plugins/broadcast-scheduler/licenses/...
+bin/64bit/Qt6HttpServer.dll
+bin/64bit/Qt6WebSockets.dll
+```
+
+Do not replace Qt Core/Gui/Widgets with SDK copies. Rebuild when OBS changes its Qt ABI. The installer retains the user database, normally under `%APPDATA%/obs-studio/plugin_config/broadcast-scheduler`; Settings → Diagnostics shows the actual location.
+
+## Linux
 
 ```sh
 docker build -f Dockerfile.dev -t broadcast-scheduler-dev .
 docker run --rm -v "$PWD:/work" broadcast-scheduler-dev bash -lc \
-  'cmake -S . -B build -G Ninja -DOBS_SOURCE_DIR=/opt/obs-src -DCMAKE_BUILD_TYPE=Debug && cmake --build build -j2 && ctest --test-dir build --output-on-failure'
+  'cmake -S . -B build -G Ninja -DOBS_SOURCE_DIR=/opt/obs-src -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2 && ctest --test-dir build --output-on-failure'
 ```
 
-The container uses the official OBS PPA for Ubuntu 24.04. Its obs-studio package includes development files; installing Ubuntu's separate libobs-dev causes a package conflict and is intentionally avoided. It also installs Qt 6, SQLite, libical, libsecret, SIMDe, Xvfb and compiler tools. It does not mount host service configuration or the Docker socket.
+The image uses Ubuntu 24.04, the OBS PPA, Qt, SQLite, libical and libsecret. External repositories can change over time; the CI log is the record of the dependency versions used by that run.
 
-For a system install in that environment: `cmake --install build --prefix /usr` (administrative permissions required). For a user's OBS plugin directory, place `.so` under `~/.config/obs-studio/plugins/broadcast-scheduler/bin/64bit/` and `data/*` under its `data/` directory. A GUI or virtual X server and OpenGL/Mesa are needed to run OBS.
+For the optional real-OBS smoke test, install the plugin inside the disposable container with `cmake --install build`, then run `python3 tests/obs_smoke.py`. Never run that script against a personal OBS profile.
 
-## macOS
+## macOS and tests
 
-Core code includes Keychain and portable Qt/SQLite/libical paths. Native macOS packaging/signing and execution are not validated here. Build with an OBS development SDK, matching Qt with HttpServer/WebSockets, SQLite and libical, then configure CMake with those prefixes. Distribution needs proper OBS `.plugin` bundle metadata, install names, universal architectures if desired, and signing/notarization. Windows is the initial supported packaging target; do not treat the macOS CMake branch as a release-ready package.
+macOS-specific credential storage exists, but its build, signed bundle and runtime are not validated.
 
-## Tests and debugging
-
-`ctest --test-dir build --output-on-failure` runs QtTest scenarios. `scheduler-service <db-path>` starts the actual store/scheduler/API without OBS; its action adapter explicitly returns a failure, not simulated recording success. `BS_TEST_TOKEN` enables its API for integration tests only. Production plugin never reads that environment variable. `BS_ZONEINFO` selects bundled timezone files for Windows core tests. Format using `.clang-format`. Build with AddressSanitizer/UBSan where supported for further qualification. See [validation](validation.md) for actual results and gaps.
+`ctest --test-dir build --output-on-failure` runs the core and HTTP tests. Windows builds also test OAuth loopback handling and DPAPI in temporary directories. See [validation](validation.md) for evidence and remaining gaps.

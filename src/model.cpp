@@ -37,13 +37,22 @@ QDateTime instant(const QString &s) {
     throw Error("Datetime must be ISO 8601 with Z or an explicit offset");
   return d.toUTC();
 }
-QStringList actionTypes() {
-  return {"record.start",  "record.stop",    "record.pause",  "record.resume",
-          "stream.start",  "stream.stop",    "scene.current", "scene.preview",
-          "source.enable", "source.disable", "source.show",   "source.hide",
-          "replay.start",  "replay.stop",    "replay.save",   "hotkey.trigger",
-          "command.run",   "webhook.http"};
+QString deviceZone() { return QString::fromUtf8(QTimeZone::systemTimeZoneId()); }
+QDateTime deviceInstant(const QString &text) {
+  static const QRegularExpression offset("(Z|z|[+-][0-9]{2}:?[0-9]{2})$");
+  if (offset.match(text.trimmed()).hasMatch())
+    return instant(text);
+  // Parse the wall-clock components in UTC first so Qt cannot normalize a DST gap.
+  auto local = QDateTime::fromString(text.trimmed() + "Z", Qt::ISODateWithMs);
+  if (!local.isValid())
+    throw Error("Invalid local date and time");
+  QDateTime result(local.date(), local.time(), QTimeZone::systemTimeZone());
+  // Reject nonexistent local times rather than silently moving a recording.
+  if (!result.isValid() || result.date() != local.date() || result.time() != local.time())
+    throw Error("This local time does not exist on this device");
+  return result.toUTC();
 }
+QStringList actionTypes() { return {"record.start", "record.stop"}; }
 QJsonObject Action::json() const {
   return {{"id", id},
           {"type", type},
@@ -104,7 +113,6 @@ QJsonObject Event::json() const {
           {"timezone", timezone},
           {"source", source},
           {"source_calendar", calendar},
-          {"template", templateId},
           {"enabled", enabled},
           {"metadata", metadata},
           {"last_updated", iso(updated)}};
@@ -119,7 +127,7 @@ Event Event::parse(const QJsonObject &o) {
   e.description = o["description"].toString();
   e.start = instant(o["start"].toString()).toMSecsSinceEpoch();
   e.end = instant(o["end"].toString()).toMSecsSinceEpoch();
-  e.timezone = o["timezone"].toString("UTC");
+  e.timezone = o["timezone"].toString(deviceZone());
   e.source = o["source"].toString("Manual");
   e.calendar = o["source_calendar"].toString();
   e.templateId = o["template"].toString();
@@ -139,19 +147,21 @@ void Event::validate() const {
            .contains(source))
     throw Error("Invalid event source");
 }
-QList<Due> plan(const QList<Event> &events, const QList<Template> &templates) {
-  QHash<QString, Template> map;
-  for (auto &t : templates)
-    map.insert(t.id, t);
+QList<Due> plan(const QList<Event> &events) {
   QList<Due> out;
-  for (auto &e : events)
-    if (e.enabled && map.contains(e.templateId))
-      for (auto &a : map[e.templateId].actions)
-        out.append(
-            {e, a,
-             (a.reference == "start" ? e.start : e.end) + a.offset * 1000});
+  for (const auto &e : events) {
+    if (!e.enabled)
+      continue;
+    out.append({e, Action{"record.start", "record.start", "start", 0, {}}, e.start});
+    out.append({e, Action{"record.stop", "record.stop", "end", 0, {}}, e.end});
+  }
   std::sort(out.begin(), out.end(), [](const Due &a, const Due &b) {
-    return a.time == b.time ? a.key() < b.key() : a.time < b.time;
+    if (a.time != b.time)
+      return a.time < b.time;
+    // Join an adjacent recording before releasing the preceding owner's lease.
+    if (a.action.type != b.action.type)
+      return a.action.type == "record.start";
+    return a.event.id < b.event.id;
   });
   return out;
 }

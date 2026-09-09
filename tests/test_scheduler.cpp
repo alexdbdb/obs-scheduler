@@ -1,5 +1,8 @@
 #include "calendar.hpp"
 #include "scheduler.hpp"
+#include "providers.hpp"
+#include <QTcpSocket>
+#include <QUrlQuery>
 #include <QTemporaryDir>
 #include <QtTest>
 using namespace bs;
@@ -13,23 +16,63 @@ class Tests : public QObject {
                          {"template", "concert"},
                          {"timezone", "Europe/Madrid"}});
   }
-  Template concert() {
-    return Template{
-        "concert",
-        "Concert",
-        {{"scene", "scene.current", "start", -600, {{"scene", "GENERAL"}}},
-         {"record", "record.start", "start", -300, {}},
-         {"stop", "record.stop", "end", 900, {}}}};
-  }
 private slots:
+  void googleBrowserAuthorization() {
+#ifndef Q_OS_WIN
+    QSKIP("Uses Windows DPAPI in an isolated temporary directory");
+#else
+    QTemporaryDir d;
+    Store s(d.path() + "/db");
+    Secrets secrets(d.path());
+    s.config("google", {{"client_id", "test.apps.googleusercontent.com"}});
+    Providers p(s, secrets);
+    QSignalSpy opened(&p, &Providers::openUrl);
+    QSignalSpy errors(&p, &Providers::problem);
+    p.connectGoogle();
+    QCOMPARE(opened.size(), 1);
+    QUrlQuery auth(QUrl(opened.first().first().toString()));
+    QCOMPARE(auth.queryItemValue("prompt"), QString("select_account consent"));
+    QCOMPARE(auth.queryItemValue("code_challenge_method"), QString("S256"));
+    QCOMPARE(auth.queryItemValue("code_challenge").size(), 43);
+    QVERIFY(auth.queryItemValue("scope").contains("calendar.events.readonly"));
+    QVERIFY(auth.queryItemValue("scope").contains("calendar.calendarlist.readonly"));
+    QVERIFY(!auth.hasQueryItem("client_secret"));
+    QVERIFY(p.googleStatus()["connecting"].toBool());
+    QVERIFY(!p.googleStatus().contains("client_id"));
+    p.connectGoogle();
+    QCOMPARE(opened.size(), 1); // Double-click must not create another attempt.
+    const QUrl redirect(auth.queryItemValue("redirect_uri"));
+    QCOMPARE(redirect.host(), QString("127.0.0.1"));
+    QTcpSocket wrong;
+    wrong.connectToHost(redirect.host(), quint16(redirect.port()));
+    QVERIFY(wrong.waitForConnected());
+    wrong.write("GET /oauth/callback?state=wrong&error=access_denied HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    QTRY_VERIFY(wrong.bytesAvailable() > 0);
+    QVERIFY(wrong.readAll().startsWith("HTTP/1.1 400"));
+    QVERIFY(p.googleStatus()["connecting"].toBool());
+    QTcpSocket denied;
+    denied.connectToHost(redirect.host(), quint16(redirect.port()));
+    QVERIFY(denied.waitForConnected());
+    denied.write("GET /oauth/callback?state=" + auth.queryItemValue("state").toUtf8() +
+                 "&error=access_denied HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    QTRY_COMPARE(errors.size(), 1);
+    QVERIFY(!p.googleStatus()["connecting"].toBool());
+    QVERIFY(!p.googleStatus()["connected"].toBool());
+    p.connectGoogle();
+    QCOMPARE(opened.size(), 2);
+    QUrlQuery retry(QUrl(opened.last().first().toString()));
+    QVERIFY(retry.queryItemValue("state") != auth.queryItemValue("state"));
+    p.disconnectGoogle();
+    QVERIFY(!p.googleStatus()["connecting"].toBool());
+#endif
+  }
   void initTestCase() { CalendarParser::setZoneDirectory(qEnvironmentVariable("BS_ZONEINFO")); }
   void offsets() {
     auto e = sample();
-    auto p = plan({e}, {concert()});
-    QCOMPARE(p.size(), 3);
-    QCOMPARE(p[0].time, e.start - 600000);
-    QCOMPARE(p[1].time, e.start - 300000);
-    QCOMPARE(p[2].time, e.end + 900000);
+    auto p = plan({e});
+    QCOMPARE(p.size(), 2);
+    QCOMPARE(p[0].time, e.start);
+    QCOMPARE(p[1].time, e.end);
   }
   void serialization() {
     auto e = sample();
@@ -72,7 +115,6 @@ private slots:
     {
       Store s(dir.path() + "/db");
       s.put(e);
-      s.put(concert());
       s.config("settings", {{"missed", "immediate"}});
       Scheduler sch(s);
       sch.execute = [&](auto &) {
@@ -80,7 +122,7 @@ private slots:
         return Outcome{"succeeded", ""};
       };
       sch.tick(e.start);
-      QCOMPARE(count, 2);
+      QCOMPARE(count, 1);
     }
     {
       Store s(dir.path() + "/db");
@@ -90,14 +132,14 @@ private slots:
         return Outcome{"succeeded", ""};
       };
       sch.tick(e.start);
-      QCOMPARE(count, 2);
-      QCOMPARE(s.history().size(), 2);
+      QCOMPARE(count, 1);
+      QCOMPARE(s.history().size(), 1);
     }
   }
   void indeterminate() {
     QTemporaryDir d;
     auto e = sample();
-    auto due = plan({e}, {concert()}).first();
+    auto due = plan({e}).first();
     {
       Store s(d.path() + "/db");
       QVERIFY(s.claim(due));
@@ -115,7 +157,6 @@ private slots:
     Store s(d.path() + "/db");
     auto e = sample(now());
     s.put(e);
-    s.put(concert());
     Scheduler sch(s);
     int n = 0;
     sch.execute = [&](auto &) {
@@ -123,43 +164,29 @@ private slots:
       return Outcome{"succeeded", ""};
     };
     sch.tick(e.start);
-    QCOMPARE(n, 0);
-    QCOMPARE(s.history().size(), 2);
+    QCOMPARE(n, 1);
+    QCOMPARE(s.history().size(), 1);
   }
-  void askAndGrace() {
+  void recordingSchedule() {
     QTemporaryDir d;
     Store s(d.path() + "/db");
     auto e = sample(now());
     s.put(e);
-    s.put(Template{"concert", "stop", {{"stop", "record.stop", "end", 0, {}}}});
-    s.config("settings", {{"record_stop", "ask"}});
     Scheduler sch(s);
-    int asked = 0, n = 0;
-    QString key;
-    sch.ask = [&](const Due &v, const QString &) {
-      ++asked;
-      key = v.key();
-    };
+    int n = 0;
     sch.execute = [&](auto &) {
       ++n;
       return Outcome{"succeeded", ""};
     };
-    sch.tick(e.end - 299000);
+    sch.tick(e.start);
     sch.tick(e.end);
-    QCOMPARE(asked, 1);
-    QCOMPARE(n, 0);
-    sch.answer(key, 15);
-    sch.tick(e.end + 899000);
-    QCOMPARE(n, 0);
-    sch.tick(e.end + 900000);
-    QCOMPARE(n, 1);
+    QCOMPARE(n, 2);
   }
   void deletedAndModified() {
     QTemporaryDir d;
     Store s(d.path() + "/db");
     auto e = sample(now() + 3600000);
     s.put(e);
-    s.put(concert());
     Scheduler sch(s);
     int n = 0;
     sch.execute = [&](auto &) {
@@ -176,6 +203,8 @@ private slots:
     sch.tick(e.start - 3600000);
     QCOMPARE(n, 0);
     sch.tick(e.start - 300000);
+    QCOMPARE(n, 0);
+    sch.tick(e.start);
     QCOMPARE(n, 1);
   }
   void simultaneousAndClock() {
@@ -186,10 +215,6 @@ private slots:
     e2.id = "second";
     s.put(e);
     s.put(e2);
-    s.put(Template{"concert",
-                   "simultaneous",
-                   {{"a", "record.start", "start", 0, {}},
-                    {"b", "stream.start", "start", 0, {}}}});
     Scheduler sch(s);
     int n = 0;
     sch.execute = [&](auto &) {
@@ -197,10 +222,43 @@ private slots:
       return Outcome{"succeeded", ""};
     };
     sch.tick(e.start);
-    QCOMPARE(n, 4);
+    QCOMPARE(n, 2);
     sch.tick(e.start - 3600000);
     sch.tick(e.start);
-    QCOMPARE(n, 4);
+    QCOMPARE(n, 2);
+  }
+  void activeRecordingKeepsStopAfterDeletionAndPause() {
+    QTemporaryDir d;
+    Store s(d.path() + "/db");
+    auto e = sample(now());
+    s.put(e);
+    Scheduler sch(s);
+    QStringList actions;
+    sch.execute = [&](const Due &due) {
+      actions.append(due.action.type);
+      return Outcome{"succeeded", ""};
+    };
+    sch.tick(e.start);
+    s.erase(e.id);
+    s.config("settings", {{"enabled", false}});
+    sch.tick(e.end);
+    QCOMPARE(actions, QStringList({"record.start", "record.stop"}));
+    QVERIFY(s.config("recording/" + e.id).isEmpty());
+  }
+  void missedStartIsNotDispatched() {
+    QTemporaryDir d;
+    Store s(d.path() + "/db");
+    auto e = sample(now());
+    s.put(e);
+    Scheduler sch(s);
+    int dispatched = 0;
+    sch.execute = [&](const Due &) {
+      ++dispatched;
+      return Outcome{"succeeded", ""};
+    };
+    sch.tick(e.start + 60001);
+    QCOMPARE(dispatched, 0);
+    QCOMPARE(s.history().first().toObject()["result"].toString(), QString("skipped"));
   }
   void ownership() {
     QVERIFY(!stopAllowed(true, false, false));

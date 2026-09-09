@@ -1,23 +1,27 @@
-# Validation record
+# Validation and release status
 
-Validation is performed in the Linux Docker development image against OBS 32.2.0, Qt 6.4.2, SQLite 3.45, libical from Ubuntu 24.04 and the native plugin ABI.
+Version 0.1.0 is a prerelease. Test counts below describe the local Windows checks performed on 8 September 2026; the [Actions page](https://github.com/alexdbdb/obs-scheduler/actions/workflows/build.yml) provides results for each published commit.
 
-The last completed automated result is:
+## Verified locally
 
-```text
-Test project /work/build
-1/2 Test #1: scheduler-tests ..................   Passed
-2/2 Test #2: api-integration ..................   Passed
-100% tests passed, 0 tests failed
-```
+- Compiled with Visual Studio 2022, Qt 6.11.1 and OBS 32.2.2 headers, linking against the installed OBS DLLs.
+- QtTest: 21 passed, none failed or skipped on Windows. This includes scheduler/calendar behavior and the local Google authorization handshake.
+- HTTP API: five tests passed, including authentication, CRUD, invalid input, sync and device-local timestamps.
+- The packaged DLL loaded successfully against the installed OBS 32 runtime.
+- A user confirmed scheduled recording starts and stops correctly in OBS after installing the recording-only build.
 
-The QtTest suite reports 17 passing scenarios covering the scheduler and calendar cases requested. The API integration test passes CRUD, authentication, CORS rejection, validation, template listing and sync request behavior.
+The OAuth test checks the authorization URL, PKCE challenge, repeated clicks, state rejection, denial, retry and cancellation using loopback sockets and temporary credentials. It does not contact Google. The build configuration also accepted a synthetic Desktop client JSON and rejected a Web client JSON in an isolated configure-only check. Synthetic credentials were not packaged.
 
-OBS startup was also verified: the module appears in the OBS loaded module list, OBS 32.2.0 launches under Xvfb, the dock is registered and the scheduler executes a real recording start/stop. The recording part created and probed an MKV and recorded confirmed execution history. The streaming part reached OBS's native stream-start path, but this container has no working local RTMP listener; OBS therefore cannot confirm the output and the smoke test stops before declaring streaming success. The test keeps the action visible as `requested`/`indeterminate` instead of reporting a false success. `tests/obs_smoke.py` is ready to rerun with an OBS stream service and RTMP endpoint:
+## Not yet verified
 
-```sh
-cmake --build build -j2
-python3 tests/obs_smoke.py
-```
+- Authorization, refresh and synchronization with a real Google account. A registered client and user consent are required.
+- Google verification for public distribution.
+- A complete interactive test of the new Google settings panel.
+- Long unattended sessions, disk-full/encoder errors, delayed OBS failures, sleep/resume and all daylight-saving edge cases.
+- macOS builds and packaging.
 
-The Windows build and the Google Calendar OAuth flow cannot be fully validated on this Linux host. Windows uses the pinned official OBS 32.2.2 SDK/dependency workflow in CI, matching the current OBS 32.2.x Qt runtime. Google requires a developer-owned Desktop OAuth client, consent screen/test user and browser authorization; no credentials are present in this repository. Production qualification must additionally cover encoder/device failures, sleep/wake, system clock changes, ambiguous DST folds and unattended recovery.
+## Automated workflows
+
+CI builds Windows and Linux from fresh checkouts and runs the core and API tests. The Windows-only OAuth/DPAPI test is explicitly skipped on Linux. The separate Linux OBS smoke script requires an isolated container, an installed plugin, Xvfb, ImageMagick and ffprobe; it is not part of the default CI test count.
+
+Old local audit and build notes are historical evidence, not current release guarantees. Do not infer Google connectivity or production readiness from a successful unit-test run.

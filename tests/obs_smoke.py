@@ -1,6 +1,6 @@
 """Run only in the disposable Docker development container after installing the plugin.
 
-Starts real OBS/Xvfb and exercises scheduled native recording and local RTMP streaming.
+Starts real OBS/Xvfb and exercises a scheduled native recording.
 Writes isolated test config and generated media under /tmp; never uses a user OBS profile.
 """
 import datetime as dt
@@ -55,10 +55,10 @@ def wait_for(predicate, timeout=30):
     raise AssertionError('Timed out waiting for real OBS transition')
 
 
-def scheduled(title, template, seconds=5):
+def scheduled(title, seconds=5):
     start = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=10)
     return request('POST', '/events', {'title': title, 'start': start.isoformat(),
-        'end': (start + dt.timedelta(seconds=seconds)).isoformat(), 'template': template})
+        'end': (start + dt.timedelta(seconds=seconds)).isoformat()})
 
 
 try:
@@ -68,7 +68,7 @@ try:
     obs = subprocess.Popen(['obs', '--multi', '--disable-missing-files-check', '--disable-updater'], env=env, stdout=output, stderr=output)
     processes.append(obs)
     wait_for(lambda: request('GET', '/status')['version'] == '0.1.0', 60)
-    event = scheduled('Native recording smoke', 'Recording Only')
+    event = scheduled('Native recording smoke')
     wait_for(lambda: request('GET', '/status')['obs']['recording'])
     subprocess.run(['import', '-window', 'root', str(artifacts / 'obs-dock.png')], env=env, check=True)
     wait_for(lambda: not request('GET', '/status')['obs']['recording'])
@@ -80,15 +80,7 @@ try:
     media = max(recordings, key=lambda p: p.stat().st_mtime)
     probe = subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'json', str(media)])
     assert float(json.loads(probe)['format']['duration']) > 1
-    receiver = subprocess.Popen(['ffmpeg', '-y', '-listen', '1', '-i', 'rtmp://127.0.0.1:1935/live/scheduler-smoke', '-c', 'copy', str(root / 'stream.flv')], stdout=output, stderr=output)
-    processes.append(receiver)
-    stream = scheduled('Native streaming smoke', 'Livestream', 8)
-    wait_for(lambda: request('GET', '/status')['obs']['streaming'])
-    wait_for(lambda: not request('GET', '/status')['obs']['streaming'])
-    with sqlite3.connect(db) as conn:
-        rows = conn.execute('SELECT action,result FROM executions WHERE event_id=?', (stream['id'],)).fetchall()
-    assert sorted(rows) == [('stream.start', 'succeeded'), ('stream.stop', 'succeeded')], rows
-    print('PASS: real OBS dock, scheduled recording, media validation, local RTMP streaming and confirmed history')
+    print('PASS: real OBS dock, scheduled recording, media validation and confirmed history')
     print('Test data:', root)
 finally:
     for process in reversed(processes):

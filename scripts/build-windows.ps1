@@ -1,10 +1,13 @@
 param(
   [string]$Configuration = 'Release',
+  [string]$InstalledOBS = '',
+  [string]$GoogleClientFile = '',
   [switch]$SkipInstaller
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 $repo = Split-Path $PSScriptRoot -Parent
+if ($GoogleClientFile) { $GoogleClientFile = (Resolve-Path -LiteralPath $GoogleClientFile).Path }
 $deps = Join-Path $repo '.deps'
 $prefix = Join-Path $deps 'sdk'
 New-Item -ItemType Directory -Force $deps, $prefix | Out-Null
@@ -52,11 +55,30 @@ if (!$qtConfig) { throw 'Qt SDK not found in official dependency archive' }
 $qt = (Resolve-Path (Join-Path $qtConfig.Directory.FullName '../../..')).Path
 $prebuilt = Join-Path $deps 'prebuilt'
 $prefixes = "$prefix;$qt;$prebuilt"
+if (!$InstalledOBS) {
 Run cmake @('-S',$obs,'-B',"$obs/build_x64",'-G','Visual Studio 17 2022','-A','x64',
   '-DENABLE_PLUGINS=OFF','-DENABLE_FRONTEND=OFF','-DENABLE_SCRIPTING=OFF',
   "-DCMAKE_PREFIX_PATH=$prefixes", "-DOBS_VERSION_OVERRIDE=$obsTag")
 Run cmake @('--build',"$obs/build_x64",'--config',$Configuration,'--target','obs-frontend-api','--parallel','4')
 Run cmake @('--install',"$obs/build_x64",'--config',$Configuration,'--component','Development','--prefix',$prefix)
+} else {
+  # Generate import libraries from the installed OBS DLL exports. Only the
+  # matching headers are used from the existing source checkout; OBS is not built.
+  New-Item -ItemType Directory -Force "$prefix/lib", "$prefix/include" | Out-Null
+  foreach ($name in @('obs', 'obs-frontend-api')) {
+    $dll = Join-Path $InstalledOBS "bin/64bit/$name.dll"
+    if (!(Test-Path $dll)) { throw "Missing OBS DLL: $dll" }
+    $exports = & dumpbin /nologo /exports $dll
+    if ($LASTEXITCODE -ne 0) { throw "Cannot inspect $dll" }
+    $symbols = @($exports | ForEach-Object {
+      if ($_ -match '^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(\S+)') { $Matches[1] }
+    })
+    if (!$symbols.Count) { throw "No exports found in $dll" }
+    @("LIBRARY $name.dll", 'EXPORTS') + $symbols | Set-Content "$prefix/lib/$name.def" -Encoding ascii
+    Run lib @('/nologo', '/machine:x64', "/def:$prefix/lib/$name.def", "/out:$prefix/lib/$name.lib")
+  }
+  @('#pragma once', '#define OBS_RELEASE_CANDIDATE 0', '#define OBS_BETA 0') | Set-Content "$prefix/include/obsconfig.h" -Encoding ascii
+}
 
 # Additional Qt modules must use exactly the Qt shipped by the OBS SDK.
 $qtVersionFile = Join-Path $qt 'lib/cmake/Qt6Core/Qt6CoreConfigVersionImpl.cmake'
@@ -64,10 +86,10 @@ if (!(Test-Path $qtVersionFile)) { $qtVersionFile = Join-Path $qt 'lib/cmake/Qt6
 $qtVersion = [regex]::Match((Get-Content $qtVersionFile -Raw), 'set\(PACKAGE_VERSION\s+"?([0-9]+\.[0-9]+\.[0-9]+)').Groups[1].Value
 if (!$qtVersion) { throw 'Cannot determine OBS Qt version' }
 foreach ($module in @(@('qtwebsockets','WebSockets'), @('qthttpserver','HttpServer'))) {
-  if (Test-Path "$qt/lib/cmake/Qt6$($module[1])/Qt6$($module[1])Config.cmake") { continue }
   $source = Join-Path $deps $module[0]
   if (!(Test-Path $source)) { Run git @('clone','--depth','1','--branch',"v$qtVersion","https://github.com/qt/$($module[0]).git",$source) }
-  Run cmake @('-S',$source,'-B',"$source/build",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$qt", "-DCMAKE_INSTALL_PREFIX=$qt", '-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF')
+  if (Test-Path "$qt/lib/cmake/Qt6$($module[1])/Qt6$($module[1])Config.cmake") { continue }
+  Run cmake @('--fresh','-S',$source,'-B',"$source/build",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$qt", "-DCMAKE_INSTALL_PREFIX=$qt", '-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF')
   Run cmake @('--build',"$source/build",'--parallel','4')
   Run cmake @('--install',"$source/build")
 }
@@ -81,19 +103,45 @@ if (!(Test-Path $sqlite)) { Archive 'https://www.sqlite.org/2025/sqlite-amalgama
 Run cmake @('-S',"$repo/cmake/sqlite",'-B',"$deps/sqlite-build",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DSQLITE_SOURCE_DIR=$sqlite", "-DCMAKE_INSTALL_PREFIX=$prefix")
 Run cmake @('--build',"$deps/sqlite-build")
 Run cmake @('--install',"$deps/sqlite-build")
-Run cmake @('-S',$repo,'-B',"$repo/build-windows",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$prefixes",'-DBUILD_TESTING=OFF')
+if (!(Test-Path "$qt/lib/cmake/Qt6Test/Qt6TestConfig.cmake")) {
+  $testSource = Join-Path $deps 'qtbase-test'
+  if (!(Test-Path $testSource)) {
+    Run git @('clone','--depth','1','--filter=blob:none','--sparse','--branch',"v$qtVersion",'https://github.com/qt/qtbase.git',$testSource)
+    Run git @('-C',$testSource,'sparse-checkout','set','src/testlib')
+  }
+  Run cmake @('-S',"$repo/cmake/qttest",'-B',"$deps/qttest-build",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$qt", "-DCMAKE_INSTALL_PREFIX=$qt", "-DQTBASE_TEST_SOURCE=$testSource", '-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF')
+  Run cmake @('--build',"$deps/qttest-build",'--parallel','4')
+  Run cmake @('--install',"$deps/qttest-build")
+}
+$pluginArgs = @('-S',$repo,'-B',"$repo/build-windows",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$prefixes",'-DBUILD_TESTING=ON')
+$pluginArgs += "-DGOOGLE_OAUTH_CLIENT_FILE=$GoogleClientFile"
+if ($InstalledOBS) {
+  $pluginArgs += @("-DOBS_INCLUDE=$obs/libobs", "-DOBS_FRONTEND_INCLUDE=$obs/frontend/api", "-DOBS_LIBRARY=$prefix/lib/obs.lib", "-DOBS_FRONTEND_LIBRARY=$prefix/lib/obs-frontend-api.lib", "-DCMAKE_CXX_FLAGS=/I`"$prefix/include`"")
+}
+Run cmake $pluginArgs
 Run cmake @('--build',"$repo/build-windows",'--parallel','4')
 $env:PATH = "$qt/bin;$prebuilt/bin;$prefix/bin;$env:PATH"
 $zones = Get-ChildItem $prefix -Directory -Filter zoneinfo -Recurse | Select-Object -First 1
 if (!$zones) { throw 'libical timezone data is missing' }
 $env:BS_ZONEINFO = $zones.FullName
+Run ctest @('--test-dir', "$repo/build-windows", '--output-on-failure', '-C', $Configuration)
 $stage = Join-Path $repo 'artifacts/windows'
 Run cmake @('--install',"$repo/build-windows",'--prefix',$stage)
 Copy-Item -Recurse -Force $zones.FullName "$stage/data/obs-plugins/broadcast-scheduler/"
 New-Item -ItemType Directory -Force "$stage/bin/64bit" | Out-Null
 foreach ($dll in @('Qt6HttpServer.dll','Qt6WebSockets.dll')) { Copy-Item "$qt/bin/$dll" "$stage/bin/64bit/" }
 Copy-Item "$repo/LICENSE", "$repo/THIRD_PARTY.md" "$stage/data/obs-plugins/broadcast-scheduler/"
-Copy-Item "$ical/LICENSE" "$stage/data/obs-plugins/broadcast-scheduler/LICENSE-libical" -ErrorAction SilentlyContinue
+Copy-Item "$ical/LICENSE" "$stage/data/obs-plugins/broadcast-scheduler/LICENSE-libical"
+$notices = "$stage/data/obs-plugins/broadcast-scheduler/licenses"
+New-Item -ItemType Directory -Force $notices | Out-Null
+Copy-Item "$repo/licenses/*" $notices
+Copy-Item "$ical/COPYING" "$notices/libical-COPYING.txt"
+foreach ($moduleName in @('qthttpserver', 'qtwebsockets')) {
+  New-Item -ItemType Directory -Force "$notices/$moduleName" | Out-Null
+  Copy-Item "$deps/$moduleName/LICENSES/*" "$notices/$moduleName/"
+}
+Copy-Item "$repo/docs/source-distribution.md" "$stage/data/obs-plugins/broadcast-scheduler/SOURCES.md"
+if ($InstalledOBS) { Run python @("$repo/tests/windows_loader.py", $stage, $InstalledOBS) }
 Compress-Archive -Force "$stage/*" "$repo/artifacts/broadcast-scheduler-0.1.0-windows-x64.zip"
 if (!$SkipInstaller) {
   $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue

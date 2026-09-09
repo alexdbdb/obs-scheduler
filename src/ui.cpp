@@ -1,4 +1,5 @@
 #include "ui.hpp"
+#include <QApplication>
 #include <QCheckBox>
 #include <QDateTimeEdit>
 #include <QDesktopServices>
@@ -6,9 +7,9 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QHostAddress>
 #include <QHBoxLayout>
 #include <QHeaderView>
-#include <QInputDialog>
 #include <QJsonDocument>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -31,15 +32,15 @@ void runUiHandler(QWidget *parent, const char *context, Function &&function) {
   } catch (const std::exception &e) {
     blog(LOG_ERROR, "[broadcast-scheduler] UI handler '%s' failed: %s", context,
          e.what());
-    QMessageBox::critical(parent, tr("Error"), QString::fromUtf8(e.what()));
+    QMessageBox::critical(parent, bs::tr("Error"), QString::fromUtf8(e.what()));
   } catch (...) {
     blog(LOG_ERROR, "[broadcast-scheduler] UI handler '%s' failed with an unknown exception",
          context);
-    QMessageBox::critical(parent, tr("Error"), tr("InternalError"));
+    QMessageBox::critical(parent, bs::tr("Error"), bs::tr("InternalError"));
   }
 }
 QPushButton *button(QBoxLayout *l, const char *key, std::function<void()> fn) {
-  auto *b = new QPushButton(tr(key));
+  auto *b = new QPushButton(bs::tr(key));
   l->addWidget(b);
   QObject::connect(b, &QPushButton::clicked, b, [b, key, fn = std::move(fn)] {
     runUiHandler(b, key, fn);
@@ -69,29 +70,10 @@ void row(QTableWidget *t, QStringList values, QString id = {}) {
 QComboBox *combo(QStringList choices, QString selected) {
   auto *c = new QComboBox;
   for (auto &s : choices)
-    c->addItem(tr(s.toUtf8().constData()), s);
+    c->addItem(bs::tr(s.toUtf8().constData()), s);
   int i = c->findData(selected);
   if (i >= 0)
     c->setCurrentIndex(i);
-  return c;
-}
-QComboBox *templateBox(const QJsonObject &state, QString selected) {
-  auto *c = new QComboBox;
-  for (auto v : state["templates"].toArray()) {
-    auto t = v.toObject();
-    c->addItem(t["name"].toString(), t["id"].toString());
-  }
-  int i = c->findData(selected);
-  if (i >= 0)
-    c->setCurrentIndex(i);
-  return c;
-}
-QComboBox *timezoneBox(QString selected) {
-  auto *c = new QComboBox;
-  c->setEditable(true);
-  for (auto &z : QTimeZone::availableTimeZoneIds())
-    c->addItem(QString::fromUtf8(z));
-  c->setCurrentText(selected);
   return c;
 }
 QDialogButtonBox *buttons(QDialog *d, QVBoxLayout *l) {
@@ -132,8 +114,7 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
   l->addWidget(dashboard);
   auto *bar = new QHBoxLayout;
   l->addLayout(bar);
-  button(bar, "AddEvent", [this] { eventDialog(); });
-  button(bar, "Templates", [this] { templates(); });
+  button(bar, "ScheduleRecording", [this] { eventDialog(); });
   button(bar, "Calendars", [this] { calendars(); });
   button(bar, "Settings", [this] { settings(); });
   auto *bar2 = new QHBoxLayout;
@@ -149,8 +130,8 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
   l->addWidget(tabs);
   auto *up = new QWidget;
   auto *ul = new QVBoxLayout(up);
-  agenda = table({tr("Title"), tr("Start"), tr("End"), tr("Template"),
-                  tr("Source"), tr("Enabled")});
+  agenda = table({bs::tr("Title"), bs::tr("Start"), bs::tr("End"),
+                  bs::tr("Source"), bs::tr("Enabled")});
   ul->addWidget(agenda);
   auto *actions = new QHBoxLayout;
   ul->addLayout(actions);
@@ -177,56 +158,40 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
   button(actions, "Delete", [this, selected] {
     auto e = selected();
     if (!e.isEmpty() &&
-        QMessageBox::question(this, tr("Delete"), tr("DeleteEvent")) ==
+        QMessageBox::question(this, bs::tr("Delete"), bs::tr("DeleteEvent")) ==
             QMessageBox::Yes)
       send("event.delete", e);
   });
-  tabs->addTab(up, tr("Upcoming"));
+  tabs->addTab(up, bs::tr("Upcoming"));
   auto *cp = new QWidget;
   auto *cl = new QVBoxLayout(cp);
   view = combo({"Agenda", "Day", "Week", "Month"}, "Month");
   cl->addWidget(view);
   calendar = new QCalendarWidget;
   cl->addWidget(calendar);
-  calendarEvents = table({tr("Title"), tr("Start"), tr("End")});
+  calendarEvents = table({bs::tr("Title"), bs::tr("Start"), bs::tr("End")});
   cl->addWidget(calendarEvents);
   connect(calendar, &QCalendarWidget::selectionChanged, this,
           &Dock::renderCalendar);
   connect(view, &QComboBox::currentIndexChanged, this, &Dock::renderCalendar);
-  tabs->addTab(cp, tr("Calendar"));
-  history = table({tr("Title"), tr("Action"), tr("Scheduled"), tr("Actual"),
-                   tr("Result"), tr("Message")});
-  tabs->addTab(history, tr("History"));
-  logs = table({tr("Actual"), tr("Result"), tr("Message")});
-  tabs->addTab(logs, tr("Logs"));
-  auto *emergency = new QHBoxLayout;
-  l->addLayout(emergency);
-  for (auto item :
-       QList<QPair<const char *, QString>>{{"StartRecording", "record.start"},
-                                           {"StopRecording", "record.stop"},
-                                           {"StartStreaming", "stream.start"},
-                                           {"StopStreaming", "stream.stop"}})
-    button(emergency, item.first, [this, item] {
-      if (item.second.endsWith("stop") &&
-          QMessageBox::warning(this, tr(item.first), tr("ConfirmStop"),
-                               QMessageBox::Yes | QMessageBox::No,
-                               QMessageBox::No) != QMessageBox::Yes)
-        return;
-      send("action", {{"type", item.second}});
-    });
+  tabs->addTab(cp, bs::tr("Calendar"));
+  history = table({bs::tr("Title"), bs::tr("Action"), bs::tr("Scheduled"), bs::tr("Actual"),
+                   bs::tr("Result"), bs::tr("Message")});
+  tabs->addTab(history, bs::tr("History"));
+  logs = table({bs::tr("Actual"), bs::tr("Result"), bs::tr("Message")});
+  tabs->addTab(logs, bs::tr("Logs"));
   connect(runtime, &Runtime::state, this, [this](QJsonObject data) {
     runUiHandler(this, "state", [this, data] { updateState(data); });
   });
   connect(runtime, &Runtime::problem, this,
-          [this](QString m) { QMessageBox::warning(this, tr("Error"), m); });
-  connect(runtime, &Runtime::ask, this, &Dock::safetyQuestion);
+          [this](QString m) { QMessageBox::warning(this, bs::tr("Error"), m); });
   connect(runtime, &Runtime::openUrl, this,
           [](QString u) { QDesktopServices::openUrl(QUrl(u)); });
   connect(runtime, &Runtime::tokenGenerated, this, [this](QString t) {
     QDialog d(this);
-    d.setWindowTitle(tr("ApiToken"));
+    d.setWindowTitle(bs::tr("ApiToken"));
     auto *l = new QVBoxLayout(&d);
-    auto *label = new QLabel(tr("TokenOnce"));
+    auto *label = new QLabel(bs::tr("TokenOnce"));
     label->setWordWrap(true);
     l->addWidget(label);
     auto *line = new QLineEdit(t);
@@ -236,11 +201,11 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
     d.exec();
   });
   connect(runtime, &Runtime::googleCalendars, this, [this](QJsonArray list) {
-    QDialog d(this);
-    d.setWindowTitle(tr("GoogleCalendars"));
+    QDialog d(QApplication::activeModalWidget() ? QApplication::activeModalWidget() : this);
+    d.setWindowTitle(bs::tr("GoogleCalendars"));
     auto *l = new QVBoxLayout(&d);
     auto *t =
-        table({tr("Enabled"), tr("Title"), tr("Template"), tr("Timezone")});
+        table({bs::tr("Enabled"), bs::tr("Title")});
     l->addWidget(t);
     auto existing = current["calendars"].toObject()["items"].toArray();
     for (auto v : list) {
@@ -250,12 +215,10 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
         if (x.toObject()["kind"].toString() == "google" &&
             x.toObject()["location"] == c["id"])
           saved = x.toObject();
-      row(t, {"", c["summary"].toString(), "", c["timeZone"].toString("UTC")},
+      row(t, {"", c["summary"].toString()},
           c["id"].toString());
       int r = t->rowCount() - 1;
       t->setCellWidget(r, 0, check(saved["enabled"].toBool(false)));
-      t->setCellWidget(r, 2,
-                       templateBox(current, saved["template"].toString()));
     }
     buttons(&d, l);
     d.resize(750, 400);
@@ -276,13 +239,10 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
                {"kind", "google"},
                {"location", location},
                {"name", t->item(i, 1)->text()},
-               {"timezone", t->item(i, 3)->text()},
+               {"timezone", deviceZone()},
                {"refresh_minutes", 15}};
         c["enabled"] =
             static_cast<QCheckBox *>(t->cellWidget(i, 0))->isChecked();
-        c["template"] = static_cast<QComboBox *>(t->cellWidget(i, 2))
-                            ->currentData()
-                            .toString();
         out.append(c);
       }
       send("calendars.save", {{"items", out}});
@@ -298,25 +258,24 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
 void Dock::updateState(QJsonObject data) {
   current = data;
   auto s = data["settings"].toObject();
-  auto zone = s["timezone"].toString("UTC");
+  auto zone = deviceZone();
   auto obs = data["obs"].toObject();
   auto next = data["next"].toObject();
   QString text =
-      tr("Recording") + ": " +
-      tr(obs["recording"].toBool() ? "Active" : "Inactive") + "   " +
-      tr("Streaming") + ": " +
-      tr(obs["streaming"].toBool() ? "Active" : "Inactive") + "\n" +
-      tr("Scheduler") + ": " +
-      tr(s["enabled"].toBool(true) ? "Running" : "Paused") +
-      "   API: " + tr(data["api_running"].toBool() ? "Running" : "Disabled") +
+      bs::tr("Recording") + ": " +
+      bs::tr(obs["recording"].toBool() ? "Active" : "Inactive") + "   " +
+      "\n" +
+      bs::tr("Scheduler") + ": " +
+      bs::tr(!data["engine_error"].toString().isEmpty() ? "EngineStopped" : s["enabled"].toBool(true) ? "Running" : "Paused") +
+      "   API: " + bs::tr(data["api_running"].toBool() ? "Running" : "Disabled") +
       "   " + zone;
   if (!next.isEmpty()) {
     auto seconds =
         now() / 1000 - instant(next["time"].toString()).toSecsSinceEpoch();
     text += "\n" + next["title"].toString() + " | " +
             display(next["start"].toString(), zone) + " — " +
-            display(next["end"].toString(), zone) + "\n" + tr("NextAction") +
-            ": " + tr(next["action"].toString().toUtf8().constData()) + " | " +
+            display(next["end"].toString(), zone) + "\n" + bs::tr("NextAction") +
+            ": " + bs::tr(next["action"].toString().toUtf8().constData()) + " | " +
             display(next["time"].toString(), zone) + " (" +
             QString::number(-seconds) + " s)";
   }
@@ -324,7 +283,7 @@ void Dock::updateState(QJsonObject data) {
     auto c = v.toObject();
     auto state = c["state"].toObject();
     text += "\n" + c["name"].toString() + ": " +
-            tr(!c["enabled"].toBool(true) ? "Disabled"
+            bs::tr(!c["enabled"].toBool(true) ? "Disabled"
                : state.isEmpty()          ? "Pending"
                : state["ok"].toBool()     ? "SyncOK"
                                           : "SyncError");
@@ -349,8 +308,8 @@ void Dock::updateState(QJsonObject data) {
   for (auto &e : ordered) {
     row(agenda,
         {e.title, display(iso(e.start), zone), display(iso(e.end), zone),
-         e.templateId, tr(e.source.toUtf8().constData()),
-         tr(e.enabled ? "Enabled" : "Disabled")},
+         bs::tr(e.source.toUtf8().constData()),
+         bs::tr(e.enabled ? "Enabled" : "Disabled")},
         e.id);
     if (e.id == selected)
       agenda->selectRow(agenda->rowCount() - 1);
@@ -359,7 +318,7 @@ void Dock::updateState(QJsonObject data) {
   for (auto v : data["history"].toArray()) {
     auto h = v.toObject();
     row(history,
-        {h["title"].toString(), tr(h["action"].toString().toUtf8().constData()),
+        {h["title"].toString(), bs::tr(h["action"].toString().toUtf8().constData()),
          display(iso(qint64(h["scheduled"].toDouble())), zone),
          display(iso(qint64(h["actual"].toDouble())), zone),
          h["result"].toString(), h["message"].toString()});
@@ -374,7 +333,7 @@ void Dock::updateState(QJsonObject data) {
 }
 void Dock::renderCalendar() {
   calendarEvents->setRowCount(0);
-  auto zone = current["settings"].toObject()["timezone"].toString("UTC");
+  auto zone = deviceZone();
   auto date = calendar->selectedDate();
   auto mode = view->currentData().toString();
   auto begin = date, end = date.addDays(1);
@@ -405,365 +364,254 @@ void Dock::renderCalendar() {
   }
 }
 void Dock::eventDialog(QJsonObject e, bool duplicate) {
+  const bool isNew = e.isEmpty();
   if (!e.isEmpty() && !duplicate && e["source"].toString() != "Manual" &&
       e["source"].toString() != "API") {
-    QMessageBox::information(this, tr("Edit"), tr("ReadOnlyEvent"));
+    QMessageBox::information(this, bs::tr("Edit"), bs::tr("ReadOnlyEvent"));
     return;
   }
   QDialog d(this);
-  d.setWindowTitle(tr("Event"));
+  d.setWindowTitle(bs::tr("ScheduleRecording"));
   auto *l = new QVBoxLayout(&d);
   auto *f = new QFormLayout;
   l->addLayout(f);
   auto *title = new QLineEdit(e["title"].toString());
   auto *description = new QPlainTextEdit(e["description"].toString());
   description->setMaximumHeight(90);
-  auto zone = e["timezone"].toString(
-      current["settings"].toObject()["timezone"].toString("UTC"));
-  auto *tz = timezoneBox(zone);
+  const auto zone = deviceZone();
   auto seed = QDateTime::currentDateTimeUtc().addSecs(120).toTimeZone(
       QTimeZone(zone.toUtf8()));
   auto *start = new QDateTimeEdit(
-      e.isEmpty() ? seed
+      isNew ? seed
                   : instant(e["start"].toString())
                         .toTimeZone(QTimeZone(zone.toUtf8())));
   auto *end = new QDateTimeEdit(
-      e.isEmpty()
+      isNew
           ? seed.addSecs(120)
           : instant(e["end"].toString()).toTimeZone(QTimeZone(zone.toUtf8())));
   for (auto *w : {start, end}) {
     w->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
     w->setCalendarPopup(true);
   }
-  auto *t = templateBox(current, e["template"].toString("Recording Only"));
   auto *enabled = check(e["enabled"].toBool(true));
-  f->addRow(tr("Title"), title);
-  f->addRow(tr("Description"), description);
-  f->addRow(tr("Start"), start);
-  f->addRow(tr("End"), end);
-  f->addRow(tr("Timezone"), tz);
-  f->addRow(tr("Template"), t);
-  f->addRow(tr("Enabled"), enabled);
+  f->addRow(bs::tr("Title"), title);
+  f->addRow(bs::tr("Description"), description);
+  f->addRow(bs::tr("Start"), start);
+  f->addRow(bs::tr("End"), end);
+  f->addRow(bs::tr("Enabled"), enabled);
   buttons(&d, l);
   while (d.exec() == QDialog::Accepted) {
-    QTimeZone z(tz->currentText().toUtf8());
+    const auto z = QTimeZone::systemTimeZone();
     QDateTime s(start->date(), start->time(), z),
         finish(end->date(), end->time(), z);
     if (!z.isValid() || !s.isValid() || !finish.isValid() || finish <= s ||
         title->text().trimmed().isEmpty()) {
-      QMessageBox::warning(this, tr("Error"), tr("InvalidEvent"));
+      QMessageBox::warning(this, bs::tr("Error"), bs::tr("InvalidEvent"));
       continue;
     }
-    e["id"] = e.isEmpty() || duplicate ? uid() : e["id"].toString();
+    e["id"] = isNew || duplicate ? uid() : e.value("id").toString();
     e["title"] = title->text();
     e["description"] = description->toPlainText();
     e["start"] = iso(s.toMSecsSinceEpoch());
     e["end"] = iso(finish.toMSecsSinceEpoch());
-    e["timezone"] = tz->currentText();
-    e["template"] = t->currentData().toString();
+    e["timezone"] = deviceZone();
+    e.remove("template");
     e["enabled"] = enabled->isChecked();
     send("event.save", e);
     break;
   }
 }
-void Dock::templates() {
-  QDialog d(this);
-  d.setWindowTitle(tr("Templates"));
-  auto *l = new QVBoxLayout(&d);
-  auto *select = templateBox(current, {});
-  l->addWidget(select);
-  auto *name = new QLineEdit;
-  l->addWidget(name);
-  auto *t = table(
-      {tr("Reference"), tr("OffsetSeconds"), tr("Action"), tr("Parameters")});
-  t->setEditTriggers(QAbstractItemView::DoubleClicked |
-                     QAbstractItemView::EditKeyPressed);
-  l->addWidget(t);
-  QString id;
-  auto add = [t](Action a) {
-    int r = t->rowCount();
-    row(t,
-        {"", "", "",
-         QString::fromUtf8(
-             QJsonDocument(a.parameters).toJson(QJsonDocument::Compact))},
-        a.id);
-    t->setCellWidget(r, 0, combo({"start", "end"}, a.reference));
-    t->setCellWidget(r, 1, spin(int(a.offset), -31622400, 31622400));
-    t->setCellWidget(r, 2, combo(actionTypes(), a.type));
-  };
-  auto load = [&] {
-    t->setRowCount(0);
-    id = select->currentData().toString();
-    for (auto v : current["templates"].toArray()) {
-      auto obj = v.toObject();
-      if (obj["id"].toString() != id)
-        continue;
-      auto temp = Template::parse(obj);
-      name->setText(temp.name);
-      std::stable_sort(temp.actions.begin(), temp.actions.end(),
-                       [](const Action &a, const Action &b) {
-                         if (a.reference == b.reference)
-                           return a.offset < b.offset;
-                         return a.reference == "start";
-                       });
-      for (auto &a : temp.actions)
-        add(a);
-    }
-  };
-  connect(select, &QComboBox::currentIndexChanged, &d, load);
-  load();
-  auto *b = new QHBoxLayout;
-  l->addLayout(b);
-  button(b, "New", [&] {
-    id = uid();
-    name->clear();
-    t->setRowCount(0);
-  });
-  button(b, "AddAction",
-         [&] { add(Action{uid(), "record.start", "start", 0, {}}); });
-  button(b, "Delete", [&] {
-    if (t->currentRow() >= 0)
-      t->removeRow(t->currentRow());
-  });
-  auto *hint = new QLabel(tr("ParametersHelp"));
-  hint->setWordWrap(true);
-  l->addWidget(hint);
-  buttons(&d, l);
-  d.resize(850, 500);
-  while (d.exec() == QDialog::Accepted) {
-    try {
-      Template temp{id, name->text(), {}};
-      for (int i = 0; i < t->rowCount(); ++i) {
-        QJsonParseError err;
-        auto params =
-            QJsonDocument::fromJson(t->item(i, 3)->text().toUtf8(), &err);
-        if (err.error != QJsonParseError::NoError || !params.isObject())
-          throw Error(tr("InvalidJSON"));
-        temp.actions.append(
-            Action{t->item(i, 0)->data(Qt::UserRole).toString(),
-                   static_cast<QComboBox *>(t->cellWidget(i, 2))
-                       ->currentData()
-                       .toString(),
-                   static_cast<QComboBox *>(t->cellWidget(i, 0))
-                       ->currentData()
-                       .toString(),
-                   static_cast<QSpinBox *>(t->cellWidget(i, 1))->value(),
-                   params.object()});
-      }
-      send("template.save", Template::parse(temp.json()).json());
-      break;
-    } catch (const std::exception &e) {
-      QMessageBox::warning(this, tr("Error"), QString::fromUtf8(e.what()));
-    }
-  }
-}
 void Dock::calendars() {
   QDialog d(this);
-  d.setWindowTitle(tr("Calendars"));
+  d.setWindowTitle(bs::tr("Calendars"));
   auto *l = new QVBoxLayout(&d);
-  auto *t = table({tr("Enabled"), tr("Title"), tr("Provider"), tr("Location"),
-                   tr("Template"), tr("RefreshMinutes"), tr("StartOffset"),
-                   tr("EndOffset"), tr("Timezone")});
-  t->setEditTriggers(QAbstractItemView::DoubleClicked |
-                     QAbstractItemView::EditKeyPressed);
+  auto *hint = new QLabel(bs::tr("CalendarHelp"));
+  hint->setWordWrap(true);
+  l->addWidget(hint);
+  auto *t = table({bs::tr("Enabled"), bs::tr("Title"), bs::tr("Provider"),
+                   bs::tr("Location"), bs::tr("RefreshMinutes")});
+  t->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
   l->addWidget(t);
-  auto add = [&](QJsonObject c) {
+  auto add = [&](const QJsonObject &c) {
     int r = t->rowCount();
-    row(t,
-        {"", c["name"].toString(), "", c["location"].toString(), "", "", "", "",
-         c["timezone"].toString("UTC")},
+    row(t, {"", c["name"].toString(), "", c["location"].toString(), ""},
         c["id"].toString(uid()));
     t->setCellWidget(r, 0, check(c["enabled"].toBool(true)));
-    t->setCellWidget(
-        r, 2, combo({"ics", "file", "google"}, c["kind"].toString("ics")));
-    t->setCellWidget(r, 4, templateBox(current, c["template"].toString()));
-    t->setCellWidget(r, 5, spin(c["refresh_minutes"].toInt(15), 1, 1440));
-    t->setCellWidget(r, 6, spin(c["start_offset"].toInt(), -86400, 86400));
-    t->setCellWidget(r, 7, spin(c["end_offset"].toInt(), -86400, 86400));
+    t->setCellWidget(r, 2, combo({"ics", "file", "google"}, c["kind"].toString("ics")));
+    t->setCellWidget(r, 4, spin(c["refresh_minutes"].toInt(15), 1, 1440));
   };
   for (auto v : current["calendars"].toObject()["items"].toArray())
     add(v.toObject());
-  auto *b = new QHBoxLayout;
-  l->addLayout(b);
-  button(b, "AddCalendar", [&] { add({}); });
-  button(b, "ImportICS", [&] {
-    auto path = QFileDialog::getOpenFileName(&d, tr("ImportICS"), {},
-                                             "iCalendar (*.ics)");
+  auto *bar = new QHBoxLayout;
+  l->addLayout(bar);
+  button(bar, "AddCalendar", [&] { add({}); });
+  button(bar, "ImportICS", [&] {
+    auto path = QFileDialog::getOpenFileName(&d, bs::tr("ImportICS"), {}, "iCalendar (*.ics)");
     if (!path.isEmpty())
-      add({{"kind", "file"},
-           {"name", QFileInfo(path).baseName()},
-           {"location", path}});
+      add({{"kind", "file"}, {"name", QFileInfo(path).baseName()}, {"location", path}});
   });
-  button(b, "Delete", [&] {
-    if (t->currentRow() >= 0)
-      t->removeRow(t->currentRow());
+  button(bar, "GoogleCalendars", [this] {
+    send(current["google"].toObject()["connected"].toBool() ? "google.list" : "google.connect");
+  });
+  button(bar, "Delete", [&] {
+    if (t->currentRow() >= 0) t->removeRow(t->currentRow());
   });
   buttons(&d, l);
-  d.resize(1000, 400);
+  d.resize(880, 400);
   if (d.exec() == QDialog::Accepted) {
     QJsonArray out;
     for (int r = 0; r < t->rowCount(); ++r)
       out.append(QJsonObject{
           {"id", t->item(r, 0)->data(Qt::UserRole).toString()},
-          {"enabled",
-           static_cast<QCheckBox *>(t->cellWidget(r, 0))->isChecked()},
+          {"enabled", static_cast<QCheckBox *>(t->cellWidget(r, 0))->isChecked()},
           {"name", t->item(r, 1)->text()},
-          {"kind", static_cast<QComboBox *>(t->cellWidget(r, 2))
-                       ->currentData()
-                       .toString()},
+          {"kind", static_cast<QComboBox *>(t->cellWidget(r, 2))->currentData().toString()},
           {"location", t->item(r, 3)->text()},
-          {"template", static_cast<QComboBox *>(t->cellWidget(r, 4))
-                           ->currentData()
-                           .toString()},
-          {"refresh_minutes",
-           static_cast<QSpinBox *>(t->cellWidget(r, 5))->value()},
-          {"start_offset",
-           static_cast<QSpinBox *>(t->cellWidget(r, 6))->value()},
-          {"end_offset", static_cast<QSpinBox *>(t->cellWidget(r, 7))->value()},
-          {"timezone", t->item(r, 8)->text()}});
+          {"refresh_minutes", static_cast<QSpinBox *>(t->cellWidget(r, 4))->value()}});
     send("calendars.save", {{"items", out}});
   }
 }
 void Dock::recurrences() {
   QDialog d(this);
-  d.setWindowTitle(tr("Recurrences"));
+  d.setWindowTitle(bs::tr("Recurrences"));
   auto *l = new QVBoxLayout(&d);
-  auto *hint = new QLabel(tr("RecurrenceHelp"));
+  auto *hint = new QLabel(bs::tr("SimpleRecurrenceHelp"));
   hint->setWordWrap(true);
   l->addWidget(hint);
-  auto *t = table({tr("Title"), tr("Start"), tr("End"), tr("Timezone"),
-                   tr("Template"), tr("RRULE"), tr("Enabled")});
-  t->setEditTriggers(QAbstractItemView::DoubleClicked |
-                     QAbstractItemView::EditKeyPressed);
+  auto *t = table({bs::tr("Title"), bs::tr("Start"), bs::tr("End"),
+                   bs::tr("Repeat"), bs::tr("Enabled")});
+  t->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
   l->addWidget(t);
-  auto add = [&](QJsonObject o) {
-    auto e = o["event"].toObject();
-    auto start = now() + 120000;
+  auto add = [&](const QJsonObject &o) {
+    const auto e = o["event"].toObject();
     int r = t->rowCount();
-    row(t,
-        {e["title"].toString(), e["start"].toString(iso(start)),
-         e["end"].toString(iso(start + 7200000)), e["timezone"].toString("UTC"),
-         "", o["rrule"].toString("FREQ=WEEKLY;BYDAY=FR"), ""},
-        e["id"].toString(uid()));
-    t->setCellWidget(r, 4, templateBox(current, e["template"].toString()));
-    t->setCellWidget(r, 6, check(e["enabled"].toBool(true)));
+    row(t, {e["title"].toString(), "", "", "", ""}, e["id"].toString(uid()));
+    auto start = e.isEmpty() ? QDateTime::currentDateTime().addSecs(120)
+                            : instant(e["start"].toString()).toLocalTime();
+    auto end = e.isEmpty() ? start.addSecs(3600) : instant(e["end"].toString()).toLocalTime();
+    for (int col : {1, 2}) {
+      auto *date = new QDateTimeEdit(col == 1 ? start : end);
+      date->setDisplayFormat("yyyy-MM-dd HH:mm");
+      date->setCalendarPopup(true);
+      t->setCellWidget(r, col, date);
+    }
+    auto *repeat = new QComboBox;
+    repeat->addItem(bs::tr("Daily"), "FREQ=DAILY");
+    repeat->addItem(bs::tr("Weekly"), "FREQ=WEEKLY");
+    repeat->addItem(bs::tr("Weekdays"), "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+    repeat->addItem(bs::tr("Monthly"), "FREQ=MONTHLY");
+    const auto rule = o["rrule"].toString("FREQ=WEEKLY");
+    int selected = repeat->findData(rule);
+    if (selected < 0) {
+      repeat->addItem(bs::tr("ExistingRecurrence"), rule);
+      selected = repeat->count() - 1;
+    }
+    repeat->setCurrentIndex(selected);
+    t->setCellWidget(r, 3, repeat);
+    t->setCellWidget(r, 4, check(e["enabled"].toBool(true)));
   };
-  for (auto v : current["recurrences"].toObject()["items"].toArray())
-    add(v.toObject());
-  auto *b = new QHBoxLayout;
-  l->addLayout(b);
-  button(b, "New", [&] { add({}); });
-  button(b, "Delete", [&] {
-    if (t->currentRow() >= 0)
-      t->removeRow(t->currentRow());
-  });
+  for (auto v : current["recurrences"].toObject()["items"].toArray()) add(v.toObject());
+  auto *bar = new QHBoxLayout;
+  l->addLayout(bar);
+  button(bar, "New", [&] { add({}); });
+  button(bar, "Delete", [&] { if (t->currentRow() >= 0) t->removeRow(t->currentRow()); });
   buttons(&d, l);
-  d.resize(1050, 400);
+  d.resize(980, 400);
   while (d.exec() == QDialog::Accepted) {
     try {
       QJsonArray out;
       for (int r = 0; r < t->rowCount(); ++r) {
-        auto e = Event::parse(
-            {{"id", t->item(r, 0)->data(Qt::UserRole).toString()},
-             {"title", t->item(r, 0)->text()},
-             {"start", t->item(r, 1)->text()},
-             {"end", t->item(r, 2)->text()},
-             {"timezone", t->item(r, 3)->text()},
-             {"template", static_cast<QComboBox *>(t->cellWidget(r, 4))
-                              ->currentData()
-                              .toString()},
-             {"enabled",
-              static_cast<QCheckBox *>(t->cellWidget(r, 6))->isChecked()}});
-        out.append(
-            QJsonObject{{"event", e.json()}, {"rrule", t->item(r, 5)->text()}});
+        auto localTime = [&](int col) {
+          auto *w = static_cast<QDateTimeEdit *>(t->cellWidget(r, col));
+          return iso(deviceInstant(w->dateTime().toString("yyyy-MM-dd'T'HH:mm:ss")).toMSecsSinceEpoch());
+        };
+        auto e = Event::parse({
+          {"id", t->item(r, 0)->data(Qt::UserRole).toString()},
+          {"title", t->item(r, 0)->text()},
+          {"start", localTime(1)}, {"end", localTime(2)},
+          {"timezone", deviceZone()},
+          {"enabled", static_cast<QCheckBox *>(t->cellWidget(r, 4))->isChecked()}});
+        out.append(QJsonObject{{"event", e.json()},
+          {"rrule", static_cast<QComboBox *>(t->cellWidget(r, 3))->currentData().toString()}});
       }
       send("recurrences.save", {{"items", out}});
       break;
     } catch (const std::exception &e) {
-      QMessageBox::warning(this, tr("Error"), QString::fromUtf8(e.what()));
+      QMessageBox::warning(&d, bs::tr("Error"), QString::fromUtf8(e.what()));
     }
   }
 }
 void Dock::settings() {
   QDialog d(this);
-  d.setWindowTitle(tr("Settings"));
+  d.setWindowTitle(bs::tr("Settings"));
   auto *l = new QVBoxLayout(&d);
   auto *tabs = new QTabWidget;
   l->addWidget(tabs);
   auto page = [&](const char *key) {
     auto *w = new QWidget;
     auto *f = new QFormLayout(w);
-    tabs->addTab(w, tr(key));
+    tabs->addTab(w, bs::tr(key));
     return f;
   };
   auto s = current["settings"].toObject();
   auto *f = page("General");
   auto *enabled = check(s["enabled"].toBool(true));
-  auto *tz = timezoneBox(s["timezone"].toString("UTC"));
-  auto *missed =
-      combo({"ignore", "immediate", "ask"}, s["missed"].toString("ignore"));
-  auto *tolerance = spin(s["tolerance_seconds"].toInt(60), 1, 86400);
-  f->addRow(tr("Enabled"), enabled);
-  f->addRow(tr("Timezone"), tz);
-  f->addRow(tr("MissedBehavior"), missed);
-  f->addRow(tr("ToleranceSeconds"), tolerance);
-  f = page("Calendars");
-  auto *cal = new QPushButton(tr("Calendars"));
-  f->addRow(cal);
-  connect(cal, &QPushButton::clicked, this, &Dock::calendars);
+  f->addRow(bs::tr("Enabled"), enabled);
+  auto *local = new QLabel(bs::tr("DeviceTimeHelp") + " (" + deviceZone() + ")");
+  local->setWordWrap(true);
+  f->addRow(local);
+  auto *safety = new QLabel(bs::tr("RecordingSafetyHelp"));
+  safety->setWordWrap(true);
+  f->addRow(safety);
   f = page("Google");
-  auto g = current["google"].toObject();
-  auto *client = new QLineEdit(g["client_id"].toString());
-  auto *secret = new QLineEdit;
-  secret->setEchoMode(QLineEdit::Password);
-  f->addRow(tr("ClientID"), client);
-  f->addRow(tr("ClientSecret"), secret);
+  auto *googleState = new QLabel;
+  googleState->setWordWrap(true);
+  f->addRow(googleState);
+  auto *googleHelp = new QLabel(bs::tr("GoogleConnectHelp"));
+  googleHelp->setWordWrap(true);
+  f->addRow(googleHelp);
   auto *googleButtons = new QHBoxLayout;
   f->addRow(googleButtons);
-  button(googleButtons, "ConnectGoogle", [&] {
-    send("google.save",
-         {{"client_id", client->text()}, {"client_secret", secret->text()}});
+  auto *connectGoogle = button(googleButtons, "ConnectGoogle", [this] {
+    if (current["google"].toObject()["connected"].toBool()) {
+      if (QMessageBox::question(this, bs::tr("ChangeGoogleAccount"),
+            bs::tr("ChangeGoogleAccountHelp")) != QMessageBox::Yes) return;
+      send("google.disconnect");
+    }
     send("google.connect");
   });
-  button(googleButtons, "Disconnect", [this] { send("google.disconnect"); });
-  button(googleButtons, "GoogleCalendars", [this] { send("google.list"); });
+  auto *disconnectGoogle = button(googleButtons, "Disconnect", [this] { send("google.disconnect"); });
+  auto *chooseGoogle = button(googleButtons, "GoogleCalendars", [this] { send("google.list"); });
+  auto updateGoogle = [googleState, connectGoogle, disconnectGoogle, chooseGoogle](QJsonObject data) {
+    const auto g = data["google"].toObject();
+    const bool configured = g["configured"].toBool();
+    const bool connected = g["connected"].toBool();
+    const bool connecting = g["connecting"].toBool();
+    googleState->setText(bs::tr(!configured ? "GoogleNotConfigured" : g["storage_error"].toBool() ? "GoogleStorageError" : connecting ? "GoogleConnecting" : connected ? "GoogleConnected" : "GoogleDisconnected"));
+    connectGoogle->setText(bs::tr(connected ? "ChangeGoogleAccount" : "ConnectGoogle"));
+    connectGoogle->setEnabled(configured && !connecting);
+    disconnectGoogle->setText(bs::tr(connecting ? "CancelGoogleConnection" : "Disconnect"));
+    disconnectGoogle->setEnabled(connected || connecting);
+    chooseGoogle->setEnabled(connected && !connecting);
+  };
+  connect(runtime, &Runtime::state, &d, updateGoogle);
+  updateGoogle(current);
   f = page("API");
   auto *apiEnabled = check(s["api_enabled"].toBool());
   auto *host = new QLineEdit(s["api_host"].toString("127.0.0.1"));
   auto *port = spin(s["api_port"].toInt(8766), 1024, 65535);
-  f->addRow(tr("Enabled"), apiEnabled);
-  f->addRow(tr("Host"), host);
-  f->addRow(tr("Port"), port);
-  auto *token = new QPushButton(tr("RegenerateToken"));
+  f->addRow(bs::tr("Enabled"), apiEnabled);
+  f->addRow(bs::tr("Host"), host);
+  f->addRow(bs::tr("Port"), port);
+  auto *token = new QPushButton(bs::tr("RegenerateToken"));
   f->addRow(token);
   connect(token, &QPushButton::clicked, this,
           [this] { send("token.generate"); });
-  f = page("Safety");
-  auto *record =
-      combo({"exact", "ask", "grace"}, s["record_stop"].toString("exact"));
-  auto *stream =
-      combo({"exact", "ask", "grace"}, s["stream_stop"].toString("exact"));
-  auto *grace = spin(s["grace_minutes"].toInt(15), 0, 1440);
-  auto *unowned = check(s["allow_unowned_stop"].toBool());
-  auto *existingRecord = combo({"leave", "ignore", "restart"},
-                               s["record_existing"].toString("leave"));
-  auto *existingStream = combo({"leave", "ignore", "restart"},
-                               s["stream_existing"].toString("leave"));
-  f->addRow(tr("RecordingStopPolicy"), record);
-  f->addRow(tr("StreamingStopPolicy"), stream);
-  f->addRow(tr("GraceMinutes"), grace);
-  f->addRow(tr("AllowUnowned"), unowned);
-  f->addRow(tr("ExistingRecording"), existingRecord);
-  f->addRow(tr("ExistingStreaming"), existingStream);
-  f = page("Advanced");
-  auto *advanced = check(s["advanced_actions"].toBool());
-  auto *debug = check(s["debug"].toBool());
-  f->addRow(tr("AdvancedActions"), advanced);
-  f->addRow(tr("Debug"), debug);
+  f = page("Diagnostics");
   auto *db = new QLineEdit(current["database"].toString());
   db->setReadOnly(true);
-  f->addRow(tr("Database"), db);
-  auto *open = new QPushButton(tr("OpenDataFolder"));
+  f->addRow(bs::tr("Database"), db);
+  auto *open = new QPushButton(bs::tr("OpenDataFolder"));
   f->addRow(open);
   connect(open, &QPushButton::clicked, this, [this] {
     QDesktopServices::openUrl(QUrl::fromLocalFile(
@@ -774,72 +622,16 @@ void Dock::settings() {
   if (d.exec() == QDialog::Accepted) {
     bool network = !QHostAddress(host->text()).isLoopback();
     if (apiEnabled->isChecked() && network &&
-        QMessageBox::warning(this, tr("API"), tr("NetworkWarning"),
+        QMessageBox::warning(this, bs::tr("API"), bs::tr("NetworkWarning"),
                              QMessageBox::Yes | QMessageBox::No,
                              QMessageBox::No) != QMessageBox::Yes)
       return;
-    if (advanced->isChecked() && !s["advanced_actions"].toBool() &&
-        QMessageBox::warning(this, tr("Advanced"), tr("AdvancedWarning"),
-                             QMessageBox::Yes | QMessageBox::No,
-                             QMessageBox::No) != QMessageBox::Yes)
-      return;
-    send("google.save",
-         {{"client_id", client->text()}, {"client_secret", secret->text()}});
     send("settings.save",
          {{"enabled", enabled->isChecked()},
-          {"timezone", tz->currentText()},
-          {"missed", missed->currentData().toString()},
-          {"tolerance_seconds", tolerance->value()},
           {"api_enabled", apiEnabled->isChecked()},
           {"api_host", host->text()},
           {"api_port", port->value()},
-          {"api_network_acknowledged", network},
-          {"record_stop", record->currentData().toString()},
-          {"stream_stop", stream->currentData().toString()},
-          {"grace_minutes", grace->value()},
-          {"allow_unowned_stop", unowned->isChecked()},
-          {"record_existing", existingRecord->currentData().toString()},
-          {"stream_existing", existingStream->currentData().toString()},
-          {"advanced_actions", advanced->isChecked()},
-          {"debug", debug->isChecked()}});
+          {"api_network_acknowledged", network}});
   }
-}
-void Dock::safetyQuestion(QString key, QString title, QString kind,
-                          QString scheduled) {
-  auto *d = new QDialog(this);
-  d->setAttribute(Qt::WA_DeleteOnClose);
-  d->setWindowTitle(tr("ScheduledStop"));
-  auto *l = new QVBoxLayout(d);
-  auto *text = new QLabel(
-      title + "\n" + tr(kind == "stop" ? "StopWarning" : "MissedWarning") +
-      "\n" +
-      display(scheduled,
-              current["settings"].toObject()["timezone"].toString("UTC")));
-  text->setTextFormat(Qt::PlainText);
-  text->setWordWrap(true);
-  l->addWidget(text);
-  auto *b = new QHBoxLayout;
-  l->addLayout(b);
-  button(b, "StopAsScheduled", [this, d, key] {
-    send("answer", {{"key", key}, {"minutes", 0}});
-    d->accept();
-  });
-  if (kind == "stop")
-    for (int n : {15, 30, 60}) {
-      auto *button =
-          new QPushButton(tr("Extend") + " " + QString::number(n) + " min");
-      b->addWidget(button);
-      connect(button, &QPushButton::clicked, d, [this, d, key, n] {
-        send("answer", {{"key", key}, {"minutes", n}});
-        d->accept();
-      });
-    }
-  button(b, "CancelScheduledAction", [this, d, key] {
-    send("answer", {{"key", key}, {"minutes", -1}});
-    d->accept();
-  });
-  connect(d, &QDialog::rejected, this,
-          [this, key] { send("answer", {{"key", key}, {"minutes", -1}}); });
-  d->show();
 }
 } // namespace bs

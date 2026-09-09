@@ -4,27 +4,27 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 namespace bs {
-void Runtime::seed() {
-  if (!store->templates().isEmpty())
+void Runtime::migrateRecordingSchedule() {
+  if (store->config("recording_schedule")["version"].toInt() == 1)
     return;
-  auto make = [&](QString name, QList<Action> actions) {
-    for (auto &a : actions)
-      a.id = uid();
-    store->put(Template{name, name, actions});
-  };
-  make("Recording Only", {{{}, "record.start", "start", 0, {}},
-                          {{}, "record.stop", "end", 0, {}}});
-  make("Concert", {{{}, "scene.current", "start", -600, {{"scene", "GENERAL"}}},
-                   {{}, "record.start", "start", -300, {}},
-                   {{}, "record.stop", "end", 900, {}}});
-  make("Podcast", {{{}, "record.start", "start", 0, {}},
-                   {{}, "record.stop", "end", 0, {}}});
-  make("Livestream", {{{}, "stream.start", "start", 0, {}},
-                      {{}, "stream.stop", "end", 0, {}}});
-  make("Church Service", {{{}, "stream.start", "start", -300, {}},
-                          {{}, "record.start", "start", 0, {}},
-                          {{}, "stream.stop", "end", 0, {}},
-                          {{}, "record.stop", "end", 600, {}}});
+  // Keep old templates/configuration as an archive. They can never dispatch actions.
+  store->sql("BEGIN IMMEDIATE");
+  try {
+    store->run("INSERT OR IGNORE INTO executions "
+      "SELECT event_id || '/' || action,event_id,title,action,scheduled,actual,result,message "
+      "FROM executions WHERE action IN ('record.start','record.stop') ORDER BY actual DESC");
+    if (!store->events().isEmpty()) {
+      auto settings = store->config("settings");
+      settings["enabled"] = false;
+      store->config("settings", settings);
+      store->log("info", "Existing schedule preserved and paused for review: every event now records from start to end");
+    }
+    store->config("recording_schedule", {{"version", 1}});
+    store->sql("COMMIT");
+  } catch (...) {
+    store->sql("ROLLBACK");
+    throw;
+  }
 }
 void Runtime::start() {
   try {
@@ -32,23 +32,17 @@ void Runtime::start() {
     secrets = std::make_unique<Secrets>(QFileInfo(path).absolutePath());
     auto settings = store->config("settings");
     if (!settings.contains("enabled")) settings["enabled"] = true;
-    if (!settings.contains("timezone")) settings["timezone"] = "UTC";
-    if (!settings.contains("missed")) settings["missed"] = "ignore";
-    if (!settings.contains("tolerance_seconds")) settings["tolerance_seconds"] = 60;
-    if (!settings.contains("record_stop")) settings["record_stop"] = "exact";
-    if (!settings.contains("stream_stop")) settings["stream_stop"] = "exact";
-    if (!settings.contains("grace_minutes")) settings["grace_minutes"] = 15;
-    if (!settings.contains("record_existing")) settings["record_existing"] = "leave";
-    if (!settings.contains("stream_existing")) settings["stream_existing"] = "leave";
+    settings["timezone"] = deviceZone();
+    settings["record_stop"] = "exact";
+    settings["record_existing"] = "leave";
+    settings["allow_unowned_stop"] = false;
+    settings["advanced_actions"] = false;
     store->config("settings", settings);
-    seed();
+    migrateRecordingSchedule();
     scheduler = std::make_unique<Scheduler>(*store);
     scheduler->execute = [this](const Due &d) {
       return action ? action(d, store->config("settings"))
                     : Outcome{"failed", "OBS unavailable"};
-    };
-    scheduler->ask = [this](const Due &d, const QString &kind) {
-      emit ask(d.key(), d.event.title, kind, iso(d.time));
     };
     providers = new Providers(*store, *secrets, this);
     api = new Api(this);
@@ -56,6 +50,7 @@ void Runtime::start() {
     connect(providers, &Providers::openUrl, this, &Runtime::openUrl);
     connect(providers, &Providers::googleCalendars, this,
             &Runtime::googleCalendars);
+    connect(providers, &Providers::changed, this, &Runtime::snapshot);
     api->call = [this](QString op, QJsonObject data) {
       return request(op, data);
     };
@@ -65,15 +60,6 @@ void Runtime::start() {
       emit problem(QString::fromUtf8(e.what()));
     }
     expandRecurrences();
-    for (auto v : store->query(
-             "SELECT key,state FROM deferred WHERE state LIKE 'ask%'")) {
-      auto row = v.toObject();
-      for (auto &d : scheduler->pending())
-        if (d.key() == row["key"].toString())
-          emit ask(d.key(), d.event.title,
-                   row["state"].toString() == "ask-stop" ? "stop" : "missed",
-                   iso(d.time));
-    }
     timer = new QTimer(this);
     timer->setTimerType(Qt::PreciseTimer);
     timer->setInterval(250);
@@ -85,8 +71,8 @@ void Runtime::start() {
         providers->sync(false);
       } catch (const std::exception &e) {
         timer->stop();
-        emit problem("Scheduler paused after internal error: " +
-                     QString::fromUtf8(e.what()));
+        engineError = QString::fromUtf8(e.what());
+        emit problem("Scheduler stopped after internal error: " + engineError);
       }
     });
     timer->start();
@@ -121,24 +107,24 @@ void Runtime::expandRecurrences() {
 void Runtime::snapshot() {
   if (!store || !scheduler)
     return;
-  QJsonArray events, templates;
+  QJsonArray events;
   for (auto &e : store->events())
     events.append(e.json());
-  for (auto &t : store->templates())
-    templates.append(t.json());
   auto settings = store->config("settings");
   settings.remove("api_token_hash");
+  settings["timezone"] = deviceZone();
   QJsonObject data{
       {"events", events},
-      {"templates", templates},
       {"settings", settings},
       {"calendars", store->config("calendars")},
       {"recurrences", store->config("recurrences")},
-      {"google", store->config("google")},
+      {"google", providers ? providers->googleStatus() : QJsonObject{}},
       {"history", store->history()},
       {"logs", store->query("SELECT * FROM logs ORDER BY id DESC LIMIT 500")},
       {"database", path},
       {"api_running", api && api->running()},
+      {"engine_running", timer && timer->isActive()},
+      {"engine_error", engineError},
       {"obs", obsStatus ? obsStatus() : QJsonObject{}}};
   auto pending = scheduler->pending();
   if (!pending.isEmpty()) {
@@ -164,7 +150,9 @@ void Runtime::command(QString op, QJsonObject data) {
   try {
     if (!store)
       throw Error("Database is not available");
-    request(op, data);
+    auto result = request(op, data);
+    if (result.value("_status").toInt(200) >= 400)
+      throw Error(result.value("error").toString());
     snapshot();
   } catch (const std::exception &e) {
     emit problem(QString::fromUtf8(e.what()));
@@ -188,18 +176,15 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
             {"scheduler_enabled",
              store->config("settings")["enabled"].toBool(true)},
             {"api_running", api->running()},
+            {"engine_running", timer && timer->isActive()},
+            {"engine_error", engineError},
+            {"device_timezone", deviceZone()},
             {"obs", obsStatus ? obsStatus() : QJsonObject{}}};
   if (op == "GET /api/v1/events") {
     QJsonArray a;
     for (auto &e : store->events())
       a.append(e.json());
     return {{"events", a}};
-  }
-  if (op == "GET /api/v1/templates") {
-    QJsonArray a;
-    for (auto &t : store->templates())
-      a.append(t.json());
-    return {{"templates", a}};
   }
   QString prefix;
   for (auto method : {"GET", "PUT", "DELETE"}) {
@@ -234,16 +219,11 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     data["external_id"] = "";
     if (op == "POST /api/v1/events")
       data["id"] = uid();
+    data["timezone"] = deviceZone();
+    data.remove("template");
+    data["start"] = iso(deviceInstant(data.value("start").toString()).toMSecsSinceEpoch());
+    data["end"] = iso(deviceInstant(data.value("end").toString()).toMSecsSinceEpoch());
     auto e = Event::parse(data);
-    bool found = false;
-    for (auto &t : store->templates())
-      if (t.id == e.templateId || t.name == e.templateId) {
-        e.templateId = t.id;
-        found = true;
-        break;
-      }
-    if (!found)
-      throw Error("Unknown template");
     if (op == "event.save") {
       auto old = store->query("SELECT id FROM events WHERE id=?", {e.id});
       if (!old.isEmpty()) {
@@ -266,20 +246,22 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     store->log("info", "Event deleted: " + e.id);
     return {};
   }
-  if (op == "template.save") {
-    auto t = Template::parse(data);
-    store->put(t);
-    store->log("info", "Template saved: " + t.id);
-    return t.json();
-  }
   if (op == "settings.save") {
     auto old = store->config("settings");
     for (auto i = data.begin(); i != data.end(); ++i)
       old[i.key()] = i.value();
-    if (!QTimeZone(old["timezone"].toString("UTC").toUtf8()).isValid())
-      throw Error("Invalid timezone");
+    old["timezone"] = deviceZone();
+    old["record_stop"] = "exact";
+    old["record_existing"] = "leave";
+    old["allow_unowned_stop"] = false;
+    old["advanced_actions"] = false;
     api->configure(old);
     store->config("settings", old);
+    if (old["enabled"].toBool(true) && timer && !timer->isActive()) {
+      expandRecurrences();
+      engineError.clear();
+      timer->start();
+    }
     return {};
   }
   if (op == "token.generate") {
@@ -293,6 +275,16 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     return {};
   }
   if (op == "calendars.save") {
+    QJsonArray normalized;
+    for (auto v : data.value("items").toArray()) {
+      auto c = v.toObject();
+      c["timezone"] = deviceZone();
+      c.remove("template");
+      c["start_offset"] = 0;
+      c["end_offset"] = 0;
+      normalized.append(c);
+    }
+    data["items"] = normalized;
     QSet<QString> ids;
     for (auto v : data["items"].toArray()) {
       auto c = v.toObject();
@@ -317,6 +309,18 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     return {};
   }
   if (op == "recurrences.save") {
+    QJsonArray normalized;
+    for (auto v : data.value("items").toArray()) {
+      auto o = v.toObject();
+      auto e = o.value("event").toObject();
+      e["timezone"] = deviceZone();
+      e.remove("template");
+      e["start"] = iso(deviceInstant(e.value("start").toString()).toMSecsSinceEpoch());
+      e["end"] = iso(deviceInstant(e.value("end").toString()).toMSecsSinceEpoch());
+      o["event"] = e;
+      normalized.append(o);
+    }
+    data["items"] = normalized;
     QSet<QString> ids;
     QList<QPair<QString, QList<Event>>> expanded;
     for (auto v : data["items"].toArray()) {
@@ -341,13 +345,6 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
       store->replaceCalendar(p.first, p.second);
     return {};
   }
-  if (op == "google.save") {
-    auto secret = data.take("client_secret").toString();
-    if (!secret.isEmpty())
-      secrets->write("google-client-secret", secret.toUtf8());
-    store->config("google", data);
-    return {};
-  }
   if (op == "google.connect") {
     providers->connectGoogle();
     return {};
@@ -364,27 +361,6 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     providers->sync(true);
     expandRecurrences();
     return {{"_status", 202}, {"result", "Sync requested"}};
-  }
-  if (op == "answer") {
-    scheduler->answer(data["key"].toString(), data["minutes"].toInt());
-    return {};
-  }
-  if (op == "action" || op.startsWith("POST /api/v1/actions/")) {
-    QString type = data["type"].toString();
-    if (op != "action")
-      type = op.mid(QString("POST /api/v1/actions/").size()).replace('/', '.');
-    if (!QStringList{"record.start", "record.stop", "stream.start",
-                     "stream.stop"}
-             .contains(type))
-      return failure(404, "Unknown action");
-    Due d;
-    d.event.id = "operator";
-    d.event.title = "Operator";
-    d.action = Action::parse({{"type", type}});
-    d.time = now();
-    auto result = scheduler->execute(d);
-    store->log(result.result, "Operator " + type + " " + result.message);
-    return {{"result", result.result}, {"message", result.message}};
   }
   return failure(405, "Method or operation not supported");
 }

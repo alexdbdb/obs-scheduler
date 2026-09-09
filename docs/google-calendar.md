@@ -1,20 +1,15 @@
-# Google Calendar setup
+# Google Calendar
 
-The provider uses the official Calendar v3 API with `calendar.readonly` scope. It lists calendars and reads expanded instances (`singleEvents=true`), following pagination. Refresh fetches a complete bounded window; deleted events disappear on successful replacement. It does not write to Google and does not assume Google is the only provider.
+For the complete Spanish setup guide, see [Registrar Google para Broadcast Scheduler](registro-google.md).
 
-1. Create/select a project in Google Cloud Console. Enable **Google Calendar API**.
-2. Configure the OAuth consent screen. Add test users if the app is in Testing. For public distribution, complete Google's applicable verification process.
-3. Create an OAuth client of type **Desktop app**. Obtain its client ID and client secret. Do not create a Web client or commit the downloaded JSON.
-4. In Broadcast Scheduler → Settings → Google, enter those values and click **Connect Google Account**.
-5. Approve access in the system browser. The plugin receives the one-time code on `http://127.0.0.1:<ephemeral-port>/oauth/callback`. Keep OBS running during this step. The listener closes on success or after five minutes.
-6. Click **Select Google calendars**, enable desired calendars and choose a template for each. Calendars dialog lets you change their refresh interval, timezone and start/end offsets.
+End users open Settings → Google → Connect Google Account, authorize read access in their system browser and select calendars. OAuth client ID and secret fields are no longer part of the user interface. Account switching disconnects the previous account and disables its calendars.
 
-PKCE S256 and random OAuth state bind the response to this instance. Access tokens stay in memory; refresh token and desktop client secret are stored using user-bound DPAPI on Windows, Keychain on macOS, Secret Service on Linux. Linux requires an unlocked desktop keyring; absent secure storage causes an explicit failure, never a plaintext fallback. API tokens are unrelated to Google and are stored only as hashes.
+The distributor registers one Google Desktop OAuth client and builds with `-GoogleClientFile` (PowerShell) or `GOOGLE_OAUTH_CLIENT_FILE` (CMake), pointing to the downloaded client JSON. Unconfigured builds display an explanatory message. Previously configured clients remain usable; switching accounts uses the bundled client when available.
 
-Disconnect removes the local refresh token, requests server-side revocation and disables Google calendars. Network revocation can fail if offline; revoke access manually in Google Account → Security if needed. Cached events remain readable but disabled. Blank client-secret field preserves the saved credential.
+The plugin requests `calendar.calendarlist.readonly` and `calendar.events.readonly`. It uses PKCE S256, a random state and a temporary loopback listener. The browser opens the Google account chooser; a successful exchange automatically opens calendar selection. Cancellation, denial and timeout allow retry; stale token responses cannot reconnect a disconnected account.
 
-Troubleshooting: `invalid_grant`/refresh failures require reconnecting; Testing-mode refresh tokens can expire under Google's policies. `redirect_uri_mismatch` usually means the wrong client type. A blocked loopback listener or firewall can prevent callback. Calendar HTTP errors appear without response bodies or tokens in logs. Signed feed URLs and private calendar configuration remain private application data even though they are not OAuth tokens: protect database backups.
+Access tokens remain in memory. Refresh tokens use Windows DPAPI, macOS Keychain or Linux Secret Service. Disconnect removes the local token, requests revocation and disables Google calendars; cached data is retained. Revocation can fail offline.
 
-Missing for real-account acceptance in this development environment: **developer-owned Desktop client ID/client secret, configured consent screen/test user, and browser consent from that Google account**. No account synchronization is claimed as verified without them.
+Google authorization and synchronization with a real account require a registered client and user consent. Local tests do not establish that Google has approved or verified the application.
 
-References: [Desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app), [Calendar list](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList/list), [Events list](https://developers.google.com/workspace/calendar/api/v3/reference/events/list), [Scopes](https://developers.google.com/workspace/calendar/api/auth).
+See the [Google desktop OAuth documentation](https://developers.google.com/identity/protocols/oauth2/native-app) and [Calendar permissions](https://developers.google.com/workspace/calendar/api/auth).

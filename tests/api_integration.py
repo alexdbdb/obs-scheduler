@@ -55,7 +55,7 @@ class API(unittest.TestCase):
     def event(self):
         start = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)
         return {'title': 'API test', 'start': start.isoformat(),
-                'end': (start + dt.timedelta(hours=2)).isoformat(), 'template': 'Recording Only'}
+                'end': (start + dt.timedelta(hours=2)).isoformat()}
 
     def test_crud(self):
         code, created = self.request('POST', '/events', self.event())
@@ -74,14 +74,23 @@ class API(unittest.TestCase):
 
     def test_validation(self):
         event = self.event()
-        event['start'] = '2026-09-10T21:00:00'
+        event['start'] = 'not-a-date'
         self.assertEqual(self.request('POST', '/events', event)[0], 400)
         self.assertEqual(self.request('PATCH', '/events', {})[0], 405)
         self.assertEqual(self.request('POST', '/events', {'title': 'Incomplete'})[0], 400)
 
-    def test_templates_and_sync(self):
-        self.assertGreaterEqual(len(self.request('GET', '/templates')[1]['templates']), 4)
+    def test_sync(self):
         self.assertEqual(self.request('POST', '/sync', {})[0], 202)
+
+    def test_device_local_times(self):
+        start = dt.datetime.now() + dt.timedelta(hours=2)
+        code, created = self.request('POST', '/events', {
+            'title': 'Local time', 'start': start.isoformat(),
+            'end': (start + dt.timedelta(hours=1)).isoformat(),
+        })
+        self.assertEqual(code, 201)
+        actual = dt.datetime.fromisoformat(created['start'].replace('Z', '+00:00'))
+        self.assertLess(abs((actual - start.astimezone()).total_seconds()), 1)
 
 
 if __name__ == '__main__':

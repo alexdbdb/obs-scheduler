@@ -1,5 +1,6 @@
 #include "providers.hpp"
 #include "calendar.hpp"
+#include "google-client.hpp"
 #include <QCryptographicHash>
 #include <QFile>
 #include <QFutureWatcher>
@@ -10,6 +11,26 @@
 #include <QUrlQuery>
 #include <QtConcurrent>
 namespace bs {
+QJsonObject Providers::googleClient() const {
+  // Preserve credentials associated with accounts connected by older builds.
+  auto c = store.config("google");
+  if (!c["client_id"].toString().isEmpty() &&
+      (QString(BS_GOOGLE_CLIENT_ID).isEmpty() || !secrets.read("google-refresh").isEmpty())) {
+    c["client_secret"] = QString::fromUtf8(secrets.read("google-client-secret"));
+    return c;
+  }
+  return {{"client_id", BS_GOOGLE_CLIENT_ID}, {"client_secret", BS_GOOGLE_CLIENT_SECRET}};
+}
+QJsonObject Providers::googleStatus() const {
+  const bool configured = !QString(BS_GOOGLE_CLIENT_ID).isEmpty() ||
+                          !store.config("google")["client_id"].toString().isEmpty();
+  QJsonObject result{{"configured", configured}, {"connected", false}, {"connecting", connecting}};
+  if (configured) {
+    try { result["connected"] = !secrets.read("google-refresh").isEmpty(); }
+    catch (const std::exception &) { result["storage_error"] = true; }
+  }
+  return result;
+}
 Providers::Providers(Store &s, Secrets &v, QObject *p)
     : QObject(p), store(s), secrets(v) {
   parsing.setMaxThreadCount(1);
@@ -22,6 +43,7 @@ Providers::Providers(Store &s, Secrets &v, QObject *p)
               [this, sock] { callbacks.remove(sock); });
       QTimer::singleShot(10000, sock, [sock] { sock->disconnectFromHost(); });
       connect(sock, &QTcpSocket::readyRead, this, [this, sock] {
+        try {
         auto &b = callbacks[sock];
         b += sock->readAll();
         if (b.size() > 8192) {
@@ -51,19 +73,23 @@ Providers::Providers(Store &s, Secrets &v, QObject *p)
         oauth.close();
         state.clear();
         if (q.queryItemValue("code").isEmpty()) {
+          connecting = false;
+          verifier.clear();
+          emit changed();
           emit problem("Google authorization was denied");
           return;
         }
-        auto c = store.config("google");
+        auto c = googleClient();
         QUrlQuery form;
         form.addQueryItem("client_id", c["client_id"].toString());
-        form.addQueryItem("client_secret", QString::fromUtf8(secrets.read(
-                                               "google-client-secret")));
+        form.addQueryItem("client_secret", c["client_secret"].toString());
         form.addQueryItem("code", q.queryItemValue("code"));
         form.addQueryItem("code_verifier", QString::fromUtf8(verifier));
         form.addQueryItem("redirect_uri", redirect);
         form.addQueryItem("grant_type", "authorization_code");
         token(form.query(QUrl::FullyEncoded).toUtf8(), [this](QString err) {
+          connecting = false;
+          emit changed();
           if (!err.isEmpty())
             emit problem(err);
           else {
@@ -71,6 +97,16 @@ Providers::Providers(Store &s, Secrets &v, QObject *p)
             listGoogle();
           }
         });
+        verifier.clear();
+        } catch (const std::exception &) {
+          sock->disconnectFromHost();
+          oauth.close();
+          state.clear();
+          verifier.clear();
+          connecting = false;
+          emit changed();
+          emit problem("Google connection failed. Check secure credential storage and try again.");
+        }
       });
     }
   });
@@ -81,6 +117,8 @@ Providers::~Providers() {
 }
 void Providers::request(const QUrl &url, const QByteArray &bearer,
                         std::function<void(QByteArray, QString)> done) {
+  const auto generation = googleGeneration;
+  const bool googleRequest = !bearer.isEmpty();
   if (url.scheme() != "https" || !url.userInfo().isEmpty()) {
     done({}, "Calendar URL must use HTTPS without userinfo");
     return;
@@ -96,7 +134,8 @@ void Providers::request(const QUrl &url, const QByteArray &bearer,
     if (r->bytesAvailable() > 8 * 1024 * 1024)
       r->abort();
   });
-  connect(r, &QNetworkReply::finished, this, [r, done] {
+  connect(r, &QNetworkReply::finished, this, [this, r, done, generation, googleRequest] {
+    if (googleRequest && generation != googleGeneration) { r->deleteLater(); return; }
     auto data = r->readAll();
     QString err;
     if (r->error() != QNetworkReply::NoError)
@@ -113,22 +152,37 @@ void Providers::request(const QUrl &url, const QByteArray &bearer,
 }
 void Providers::token(const QByteArray &body,
                       std::function<void(QString)> done) {
+  const auto generation = googleGeneration;
   QNetworkRequest req(QUrl("https://oauth2.googleapis.com/token"));
   req.setHeader(QNetworkRequest::ContentTypeHeader,
                 "application/x-www-form-urlencoded");
   req.setTransferTimeout(30000);
   auto *r = network.post(req, body);
-  connect(r, &QNetworkReply::finished, this, [this, r, done] {
+  connect(r, &QNetworkReply::finished, this, [this, r, done, generation] {
+    if (generation != googleGeneration) { r->deleteLater(); return; }
     auto o = QJsonDocument::fromJson(r->readAll()).object();
     bool ok = r->error() == QNetworkReply::NoError &&
               !o["access_token"].toString().isEmpty();
     r->deleteLater();
     if (!ok) {
+      if (o["error"].toString() == "invalid_grant") {
+        try { secrets.remove("google-refresh"); } catch (const std::exception &) {}
+        access.clear();
+        accessExpires = 0;
+        emit changed();
+      }
       done("Google token request failed; reconnect the account or check OAuth "
            "client configuration");
       return;
     }
     try {
+      const auto scopes = o["scope"].toString().split(' ');
+      if (o.contains("scope") && !scopes.contains("https://www.googleapis.com/auth/calendar.readonly") &&
+          (!scopes.contains("https://www.googleapis.com/auth/calendar.events.readonly") ||
+           !scopes.contains("https://www.googleapis.com/auth/calendar.calendarlist.readonly"))) {
+        done("Allow both calendar permissions to connect Google Calendar.");
+        return;
+      }
       auto refresh = o["refresh_token"].toString();
       if (!refresh.isEmpty())
         secrets.write("google-refresh", refresh.toUtf8());
@@ -151,11 +205,10 @@ void Providers::authorized(std::function<void(QString)> done) {
       done("Connect a Google account first");
       return;
     }
-    auto c = store.config("google");
+    auto c = googleClient();
     QUrlQuery form;
     form.addQueryItem("client_id", c["client_id"].toString());
-    form.addQueryItem("client_secret",
-                      QString::fromUtf8(secrets.read("google-client-secret")));
+    form.addQueryItem("client_secret", c["client_secret"].toString());
     form.addQueryItem("refresh_token", QString::fromUtf8(refresh));
     form.addQueryItem("grant_type", "refresh_token");
     token(form.query(QUrl::FullyEncoded).toUtf8(), done);
@@ -164,9 +217,15 @@ void Providers::authorized(std::function<void(QString)> done) {
   }
 }
 void Providers::connectGoogle() {
-  auto c = store.config("google");
+  auto c = googleClient();
   if (c["client_id"].toString().isEmpty())
-    throw Error("Configure a Desktop OAuth client ID first");
+    throw Error("Google connection is not configured in this installer. Contact the plugin distributor.");
+  if (connecting) return;
+  if (!QString(BS_GOOGLE_CLIENT_ID).isEmpty() && secrets.read("google-refresh").isEmpty()) {
+    store.config("google", {});
+    secrets.remove("google-client-secret");
+  }
+  ++googleGeneration;
   secrets.write("storage-check", "ok");
   secrets.remove("storage-check");
   oauth.close();
@@ -176,14 +235,17 @@ void Providers::connectGoogle() {
              "/oauth/callback";
   verifier = Secrets::random();
   state = Secrets::random();
+  connecting = true;
+  const auto attempt = state;
   QUrl url("https://accounts.google.com/o/oauth2/v2/auth");
   QUrlQuery q;
   q.addQueryItem("client_id", c["client_id"].toString());
   q.addQueryItem("redirect_uri", redirect);
   q.addQueryItem("response_type", "code");
-  q.addQueryItem("scope", "https://www.googleapis.com/auth/calendar.readonly");
+  q.addQueryItem("scope", "https://www.googleapis.com/auth/calendar.events.readonly "
+                         "https://www.googleapis.com/auth/calendar.calendarlist.readonly");
   q.addQueryItem("access_type", "offline");
-  q.addQueryItem("prompt", "consent");
+  q.addQueryItem("prompt", "select_account consent");
   q.addQueryItem("state", QString::fromUtf8(state));
   q.addQueryItem("code_challenge_method", "S256");
   q.addQueryItem(
@@ -194,12 +256,21 @@ void Providers::connectGoogle() {
                         QByteArray::OmitTrailingEquals)));
   url.setQuery(q);
   emit openUrl(url.toString());
-  QTimer::singleShot(300000, this, [this] {
+  emit changed();
+  QTimer::singleShot(300000, this, [this, attempt] {
+    if (state != attempt) return;
     oauth.close();
     state.clear();
+    verifier.clear();
+    connecting = false;
+    emit changed();
+    emit problem("Google connection timed out. Click Connect with Google to try again.");
   });
 }
 void Providers::disconnectGoogle() {
+  ++googleGeneration;
+  connecting = false;
+  verifier.clear();
   auto refresh = secrets.read("google-refresh");
   secrets.remove("google-refresh");
   access.clear();
@@ -219,8 +290,11 @@ void Providers::disconnectGoogle() {
   QJsonArray list;
   for (auto v : c["items"].toArray()) {
     auto o = v.toObject();
-    if (o["kind"].toString() == "google")
+    if (o["kind"].toString() == "google") {
       o["enabled"] = false;
+      busy.remove(o["id"].toString());
+      last.remove(o["id"].toString());
+    }
     list.append(o);
   }
   c["items"] = list;

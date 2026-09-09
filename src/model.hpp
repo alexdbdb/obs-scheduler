@@ -13,6 +13,9 @@ struct Error : std::runtime_error {
 QString uid();
 qint64 now();
 QDateTime instant(const QString &text);
+// UI/API wall times use the operating system zone. Explicit offsets retain their instant.
+QDateTime deviceInstant(const QString &text);
+QString deviceZone();
 QString iso(qint64 ms);
 QStringList actionTypes();
 struct Action {
@@ -44,6 +47,6 @@ struct Due {
   qint64 time = 0;
   QString key() const { return event.id + "/" + action.id; }
 };
-QList<Due> plan(const QList<Event> &events, const QList<Template> &templates);
+QList<Due> plan(const QList<Event> &events);
 bool stopAllowed(bool active, bool owned, bool allowUnowned);
 } // namespace bs

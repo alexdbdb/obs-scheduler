@@ -18,12 +18,9 @@ class Dock : public QWidget {
   void send(QString op, QJsonObject data = {});
   void renderCalendar();
   void eventDialog(QJsonObject event = {}, bool duplicate = false);
-  void templates();
   void calendars();
   void recurrences();
   void settings();
-  void safetyQuestion(QString key, QString title, QString kind,
-                      QString scheduled);
 
 public:
   explicit Dock(Runtime *r, QWidget *parent = nullptr);

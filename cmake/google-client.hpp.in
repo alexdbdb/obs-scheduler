@@ -1,0 +1,4 @@
+#pragma once
+// Desktop client identity, not an account token. Never log these values.
+#define BS_GOOGLE_CLIENT_ID "@GOOGLE_CLIENT_ID@"
+#define BS_GOOGLE_CLIENT_SECRET "@GOOGLE_CLIENT_SECRET@"

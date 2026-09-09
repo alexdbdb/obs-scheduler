@@ -15,7 +15,8 @@ class Runtime : public QObject {
   Api *api = nullptr;
   QTimer *timer = nullptr;
   qint64 recurrenceRefresh = 0;
-  void seed();
+  QString engineError;
+  void migrateRecordingSchedule();
   void expandRecurrences();
   QJsonObject request(const QString &operation, QJsonObject data);
 
@@ -31,7 +32,6 @@ public slots:
 signals:
   void state(QJsonObject data);
   void problem(QString message);
-  void ask(QString key, QString title, QString kind, QString scheduled);
   void openUrl(QString url);
   void googleCalendars(QJsonArray calendars);
   void tokenGenerated(QString token);
