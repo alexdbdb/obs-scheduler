@@ -34,7 +34,7 @@ Builds target **OBS 32.2.2 x64 with Qt 6.11.1**. Other OBS/Qt combinations are n
 
 For developers, a portable ZIP is also available in successful [Actions builds](https://github.com/alexdbdb/obs-scheduler/actions/workflows/build.yml). It can be extracted into the OBS installation directory, preserving its paths. Uninstalling the plugin retains its database and settings.
 
-Public CI builds do **not** include a Google OAuth client. Manual schedules, recurrences, ICS and the API work without Google. Distributors can follow the [Google registration guide in Spanish](docs/registro-google.md) to build a Google-enabled installer. Ordinary users do not enter client IDs or secrets.
+The official v0.1.0 Windows installer includes the project's Google Desktop OAuth client, so ordinary users only need to click **Connect Google account** and authorize in their browser. Generic CI artifacts do **not** include that client. Manual schedules, recurrences, ICS and the API work without Google. Distributors using their own Google project can follow the [Google registration guide in Spanish](docs/registro-google.md); end users never enter client IDs or secrets.
 
 ## First recording
 

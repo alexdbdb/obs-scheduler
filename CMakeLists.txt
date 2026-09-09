@@ -19,7 +19,12 @@ if(GOOGLE_OAUTH_CLIENT_FILE)
     message(FATAL_ERROR "Expected a valid Google Desktop OAuth client JSON")
   endif()
 endif()
-configure_file(cmake/google-client.hpp.in generated/google-client.hpp @ONLY)
+set(GOOGLE_CLIENT_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/google-client.hpp")
+configure_file(cmake/google-client.hpp.in "${GOOGLE_CLIENT_HEADER}" @ONLY)
+# Keep this dependency explicit. Some Windows/Ninja environments do not parse
+# localized MSVC /showIncludes output, so changing the OAuth JSON could otherwise
+# leave providers.cpp compiled with the previous client identity.
+set_property(SOURCE src/providers.cpp APPEND PROPERTY OBJECT_DEPENDS "${GOOGLE_CLIENT_HEADER}")
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Widgets Network HttpServer Concurrent)
 find_package(SQLite3 REQUIRED)
 find_package(LibIcal CONFIG QUIET)
