@@ -11,7 +11,6 @@ class Dock : public QWidget {
   Q_OBJECT
   Runtime *runtime;
   QJsonObject current;
-  QLabel *dashboard;
   QTableWidget *agenda, *calendarEvents, *history, *logs;
   QCalendarWidget *calendar;
   QComboBox *view;

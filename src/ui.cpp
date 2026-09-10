@@ -133,10 +133,6 @@ void Dock::send(QString op, QJsonObject data) {
 }
 Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
   auto *l = new QVBoxLayout(this);
-  dashboard = new QLabel;
-  dashboard->setWordWrap(true);
-  dashboard->setTextFormat(Qt::PlainText);
-  l->addWidget(dashboard);
   auto *bar = new QHBoxLayout;
   l->addLayout(bar);
   button(bar, "ScheduleRecording", [this] { eventDialog(); });
@@ -396,38 +392,7 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
 }
 void Dock::updateState(QJsonObject data) {
   current = data;
-  auto s = data["settings"].toObject();
   auto zone = deviceZone();
-  auto obs = data["obs"].toObject();
-  auto next = data["next"].toObject();
-  QString text =
-      bs::tr("Recording") + ": " +
-      bs::tr(obs["recording"].toBool() ? "Active" : "Inactive") + "   " +
-      "\n" +
-      bs::tr("Scheduler") + ": " +
-      bs::tr(!data["engine_error"].toString().isEmpty() ? "EngineStopped" : s["enabled"].toBool(true) ? "Running" : "Paused") +
-      "   API: " + bs::tr(data["api_running"].toBool() ? "Running" : "Disabled") +
-      "   " + zone;
-  if (!next.isEmpty()) {
-    auto seconds =
-        now() / 1000 - instant(next["time"].toString()).toSecsSinceEpoch();
-    text += "\n" + next["title"].toString() + " | " +
-            display(next["start"].toString(), zone) + " — " +
-            display(next["end"].toString(), zone) + "\n" + bs::tr("NextAction") +
-            ": " + bs::tr(next["action"].toString().toUtf8().constData()) + " | " +
-            display(next["time"].toString(), zone) + " (" +
-            QString::number(-seconds) + " s)";
-  }
-  for (auto v : data["sync"].toArray()) {
-    auto c = v.toObject();
-    auto state = c["state"].toObject();
-    text += "\n" + c["name"].toString() + ": " +
-            bs::tr(!c["enabled"].toBool(true) ? "Disabled"
-               : state.isEmpty()          ? "Pending"
-               : state["ok"].toBool()     ? "SyncOK"
-                                          : "SyncError");
-  }
-  dashboard->setText(text);
   QString selected;
   if (agenda->currentRow() >= 0)
     selected =
