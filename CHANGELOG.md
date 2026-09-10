@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 — restore excluded events
+
+- Added an Excluded events tab with calendar, source ID and exclusion date.
+- Restore selected events using Ctrl+click, or restore all exclusions, with confirmation.
+- Restoration synchronizes providers again and respects their current filters and date window.
+- Added English/Spanish translations and regression coverage for selective restoration and persistence.
+
 ## 0.2.1 — maintenance release
 
 - Removed the redundant status dashboard from the main dock to keep the scheduler compact.

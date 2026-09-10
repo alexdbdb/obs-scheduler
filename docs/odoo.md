@@ -29,6 +29,8 @@ The plugin reads active events whose dates overlap a rolling range from now thro
 
 The filter dialog reads event types and stages from Odoo. All options are selected the first time. Once filters are saved, clearing every option in any one group intentionally imports no events. The three Odoo kanban values are in progress (`normal`), ready for the next stage (`done`) and blocked (`blocked`).
 
+Deleting an imported event excludes it locally across synchronizations. In the **Excluded events** tab, use Ctrl+click and **Restore selected**, or **Restore all**, to remove exclusions and synchronize again. Restored events must still match the current filters and date window. The list shows the calendar, source event ID and exclusion date; it does not delete or modify events in Odoo or Google.
+
 A failed request preserves the last successful local snapshot and records a sanitized error in Scheduler logs. Disconnecting removes the local API key and managed Odoo calendar. It does not revoke the key on the Odoo server; revoke it from Odoo if it may have been exposed.
 
 Official references: [Odoo 16 external API](https://www.odoo.com/documentation/16.0/developer/reference/external_api.html) and [Odoo 19 JSON-2 API](https://www.odoo.com/documentation/19.0/developer/reference/external_api.html).

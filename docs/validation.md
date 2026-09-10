@@ -1,6 +1,6 @@
 # Validation and release status
 
-Version 0.2.1 is a public maintenance release. Evidence below describes local Windows checks on 10 September 2026.
+Version 0.2.2 is a public maintenance release. Evidence below describes local Windows checks on 10 September 2026.
 
 ## Verified locally
 

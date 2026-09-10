@@ -23,7 +23,7 @@ These account-side actions require the maintainer's Google Cloud and GitHub acce
 
 ## GitHub release
 
-Push a reviewed v0.2.1 tag after the account-side checks and qualification. The build workflow runs tests and creates a **draft release** with Windows packages, corresponding sources and checksums. Review all assets and release notes before publishing the draft. The workflow never changes repository visibility.
+Push a reviewed v0.2.2 tag after the account-side checks and qualification. The build workflow runs tests and creates a **draft release** with Windows packages, corresponding sources and checksums. Review all assets and release notes before publishing the draft. The workflow never changes repository visibility.
 
 Only make the repository public after the historical-client and release-asset checks are complete. The installer is currently unsigned; users may see Windows reputation warnings. Signing can be added when a publisher certificate is available.
 

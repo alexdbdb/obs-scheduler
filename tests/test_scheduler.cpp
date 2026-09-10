@@ -454,6 +454,35 @@ private slots:
     event.title = "<>:\"/\\|?*%";
     QCOMPARE(recordingFilename(event), QString("2026-09-10 - _"));
   }
+  void restoreExcludedIsScopedAndSurvivesRestart() {
+    QTemporaryDir d;
+    const auto path = d.path() + "/db";
+    auto a = sample();
+    a.calendar = "odoo-events";
+    a.externalId = "event.event/42";
+    a.source = "OdooEvent";
+    auto b = a;
+    b.id = "second";
+    b.externalId = "event.event/43";
+    {
+      Store s(path);
+      s.replaceCalendar(a.calendar, {a, b});
+      s.ignoreExternal(a);
+      s.ignoreExternal(b);
+      s.restoreExternal("other-calendar", a.externalId);
+      QCOMPARE(s.query("SELECT * FROM ignored_events").size(), 2);
+      s.restoreExternal(a.calendar, a.externalId);
+      s.restoreExternal(a.calendar, a.externalId);
+      QCOMPARE(s.query("SELECT * FROM ignored_events").size(), 1);
+    }
+    Store s(path);
+    s.replaceCalendar(a.calendar, {a, b});
+    QCOMPARE(s.events().size(), 1);
+    QCOMPARE(s.events().first().externalId, a.externalId);
+    s.restoreExternal(b.calendar, b.externalId);
+    s.replaceCalendar(a.calendar, {a, b});
+    QCOMPARE(s.events().size(), 2);
+  }
   void ignoredExternalEventPersists() {
     QTemporaryDir d;
     const auto path = d.path() + "/db";

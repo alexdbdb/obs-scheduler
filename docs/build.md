@@ -14,9 +14,9 @@ The script pins OBS 32.2.2, reads its dependency metadata and verifies the offic
 
 Artifacts:
 
-- `artifacts/Broadcast-Scheduler-0.2.1-Setup.exe`
-- `artifacts/broadcast-scheduler-0.2.1-windows-x64.zip`
-- `artifacts/SHA256SUMS-0.2.1.txt`
+- `artifacts/Broadcast-Scheduler-0.2.2-Setup.exe`
+- `artifacts/broadcast-scheduler-0.2.2-windows-x64.zip`
+- `artifacts/SHA256SUMS-0.2.2.txt`
 
 Internet access and several GB of free space are needed on the first build. Build caches and downloads live in `.deps` and are ignored by Git. Use `-SkipInstaller` for ZIP-only packaging.
 
@@ -71,10 +71,10 @@ macOS-specific credential storage exists, but its build, signed bundle and runti
 With a package staging directory available:
 
 ```powershell
-python tests/windows_loader.py artifacts/windows-0.2.1 "C:/Program Files/obs-studio" build-windows/package-probe.exe
-python tests/windows_obs_smoke.py artifacts/windows-0.2.1
-python tests/windows_obs_smoke.py artifacts/windows-0.2.1 --language es-ES
-pwsh -File tests/installer_smoke.ps1 -Stage artifacts/windows-0.2.1
+python tests/windows_loader.py artifacts/windows-0.2.2 "C:/Program Files/obs-studio" build-windows/package-probe.exe
+python tests/windows_obs_smoke.py artifacts/windows-0.2.2
+python tests/windows_obs_smoke.py artifacts/windows-0.2.2 --language es-ES
+pwsh -File tests/installer_smoke.ps1 -Stage artifacts/windows-0.2.2
 python scripts/release-audit.py --history
 ```
 

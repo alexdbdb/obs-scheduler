@@ -12,7 +12,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Test installer compilation failed' }
 $testRoot = Join-Path $repo ("artifacts/installer-smoke-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 $target = Join-Path $testRoot 'broadcast-scheduler'
-$setup = Join-Path $repo 'artifacts/Broadcast-Scheduler-0.2.1-InstallerTest.exe'
+$setup = Join-Path $repo 'artifacts/Broadcast-Scheduler-0.2.2-InstallerTest.exe'
 $arguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$target`"", "/LOG=`"$testRoot/install.log`"")
 $process = Start-Process -FilePath $setup -ArgumentList $arguments -PassThru -Wait -WindowStyle Hidden
 if ($process.ExitCode -ne 0) { throw "Installer exited $($process.ExitCode)" }

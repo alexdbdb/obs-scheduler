@@ -191,6 +191,10 @@ void Store::ignoreExternal(const Event &e) {
 void Store::clearIgnored(const QString &calendar) {
   run("DELETE FROM ignored_events WHERE calendar=?", {calendar});
 }
+void Store::restoreExternal(const QString &calendar, const QString &externalId) {
+  run("DELETE FROM ignored_events WHERE calendar=? AND external_id=?",
+      {calendar, externalId});
+}
 void Store::replaceCalendar(const QString &id, const QList<Event> &list) {
   sql("BEGIN IMMEDIATE");
   try {

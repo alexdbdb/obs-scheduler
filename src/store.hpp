@@ -22,6 +22,7 @@ public:
   void erase(const QString &id);
   void ignoreExternal(const Event &event);
   void clearIgnored(const QString &calendar);
+  void restoreExternal(const QString &calendar, const QString &externalId);
   void replaceCalendar(const QString &id, const QList<Event> &events);
   QJsonObject config(const QString &key) const;
   void config(const QString &key, const QJsonObject &value);

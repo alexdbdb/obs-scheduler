@@ -129,6 +129,7 @@ void Runtime::snapshot() {
       {"google", providers ? providers->googleStatus() : QJsonObject{}},
       {"odoo", providers ? providers->odooStatus() : QJsonObject{}},
       {"history", store->history()},
+      {"excluded", store->query("SELECT calendar,external_id,created FROM ignored_events ORDER BY created DESC")},
       {"logs", store->query("SELECT * FROM logs ORDER BY id DESC LIMIT 500")},
       {"database", path},
       {"api_running", api && api->running()},
@@ -269,6 +270,14 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     } else {
       throw Error("Recurring events are read-only");
     }
+    return {};
+  }
+  if (op == "events.restore") {
+    for (auto value : data["items"].toArray()) {
+      auto item = value.toObject();
+      store->restoreExternal(item["calendar"].toString(), item["external_id"].toString());
+    }
+    providers->sync(true);
     return {};
   }
   if (op == "settings.save") {

@@ -11,7 +11,7 @@ class Dock : public QWidget {
   Q_OBJECT
   Runtime *runtime;
   QJsonObject current;
-  QTableWidget *agenda, *calendarEvents, *history, *logs;
+  QTableWidget *agenda, *calendarEvents, *history, *logs, *excluded;
   QCalendarWidget *calendar;
   QComboBox *view;
   void send(QString op, QJsonObject data = {});

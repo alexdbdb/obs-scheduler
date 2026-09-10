@@ -246,6 +246,31 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
   tabs->addTab(history, bs::tr("History"));
   logs = table({bs::tr("Actual"), bs::tr("Result"), bs::tr("Message")});
   tabs->addTab(logs, bs::tr("Logs"));
+  auto *excludedPage = new QWidget;
+  auto *excludedLayout = new QVBoxLayout(excludedPage);
+  auto *excludedHelp = new QLabel(bs::tr("ExcludedHelp"));
+  excludedHelp->setWordWrap(true);
+  excludedLayout->addWidget(excludedHelp);
+  excluded = table({bs::tr("Calendar"), bs::tr("ExternalID"), bs::tr("ExcludedAt")});
+  excluded->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  excludedLayout->addWidget(excluded);
+  auto *restoreBar = new QHBoxLayout;
+  excludedLayout->addLayout(restoreBar);
+  auto restore = [this](bool all) {
+    QJsonArray items;
+    for (int i = 0; i < excluded->rowCount(); ++i) {
+      if (all || excluded->selectionModel()->isRowSelected(i, QModelIndex()))
+        items.append(excluded->item(i, 0)->data(Qt::UserRole).toJsonObject());
+    }
+    if (items.isEmpty()) return;
+    if (QMessageBox::question(this, bs::tr("ExcludedEvents"),
+                              bs::tr("RestoreExcludedConfirm").arg(items.size())) != QMessageBox::Yes)
+      return;
+    send("events.restore", {{"items", items}});
+  };
+  button(restoreBar, "RestoreSelected", [restore] { restore(false); });
+  button(restoreBar, "RestoreAll", [restore] { restore(true); });
+  tabs->addTab(excludedPage, bs::tr("ExcludedEvents"));
   connect(runtime, &Runtime::state, this, [this](QJsonObject data) {
     runUiHandler(this, "state", [this, data] { updateState(data); });
   });
@@ -393,6 +418,23 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
 void Dock::updateState(QJsonObject data) {
   current = data;
   auto zone = deviceZone();
+  // Do not rebuild an unchanged table on each snapshot: preserve Ctrl+click selection.
+  const auto excludedItems = data["excluded"].toArray();
+  if (excluded->property("items").toJsonArray() != excludedItems) {
+    excluded->setProperty("items", excludedItems);
+    excluded->setRowCount(0);
+    for (auto value : excludedItems) {
+      auto item = value.toObject();
+      QString name = item["calendar"].toString();
+      for (auto calendarValue : data["calendars"].toObject()["items"].toArray()) {
+        auto cal = calendarValue.toObject();
+        if (cal["id"] == item["calendar"]) name = cal["name"].toString(name);
+      }
+      row(excluded, {name, item["external_id"].toString(),
+                     display(iso(qint64(item["created"].toDouble())), zone)});
+      excluded->item(excluded->rowCount() - 1, 0)->setData(Qt::UserRole, item);
+    }
+  }
   QString selected;
   if (agenda->currentRow() >= 0)
     selected =
