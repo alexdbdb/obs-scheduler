@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 $repo = Split-Path $PSScriptRoot -Parent
-$version = '0.2.0'
+$version = '0.2.1'
 $deps = Join-Path $repo '.deps'
 $prefix = Join-Path $deps 'sdk'
 New-Item -ItemType Directory -Force $deps, $prefix | Out-Null

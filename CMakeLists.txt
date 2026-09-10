@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(broadcast-scheduler VERSION 0.2.0 LANGUAGES C CXX)
+project(broadcast-scheduler VERSION 0.2.1 LANGUAGES C CXX)
 set(BROADCAST_SCHEDULER_VERSION "${PROJECT_VERSION}")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

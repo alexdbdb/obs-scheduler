@@ -4,11 +4,11 @@
 
 Schedule the start and end of OBS recordings from manual events, recurring events, ICS calendars, Google Calendar, Odoo Events or a local API. External credentials are supplied locally by each user.
 
-**Version 0.2.0.** Target: Windows x64, OBS 32.2.2 / Qt 6.11.1. Google and Odoo synchronization have been confirmed by a user; unattended operation under failure conditions still needs qualification. See [validation](docs/validation.md).
+**Version 0.2.1.** Target: Windows x64, OBS 32.2.2 / Qt 6.11.1. Google and Odoo synchronization have been confirmed by a user; unattended operation under failure conditions still needs qualification. See [validation](docs/validation.md).
 
 ## Download
 
-[**Download the Windows installer (.exe)**](https://github.com/alexdbdb/obs-scheduler/releases/download/v0.2.0/Broadcast-Scheduler-0.2.0-Setup.exe) · [View all release files](https://github.com/alexdbdb/obs-scheduler/releases)
+[**Download the Windows installer (.exe)**](https://github.com/alexdbdb/obs-scheduler/releases/download/v0.2.1/Broadcast-Scheduler-0.2.1-Setup.exe) · [View all release files](https://github.com/alexdbdb/obs-scheduler/releases)
 
 Alternatively, build it locally.
 
@@ -34,9 +34,9 @@ The plugin uses the device timezone for manual times and display. It does not pr
 
 Builds target **OBS 32.2.2 x64 with Qt 6.11.1**. Other OBS/Qt combinations are not validated.
 
-1. Download the [0.2.0 Windows installer](https://github.com/alexdbdb/obs-scheduler/releases/download/v0.2.0/Broadcast-Scheduler-0.2.0-Setup.exe), or build it locally.
+1. Download the [0.2.1 Windows installer](https://github.com/alexdbdb/obs-scheduler/releases/download/v0.2.1/Broadcast-Scheduler-0.2.1-Setup.exe), or build it locally.
 2. Close OBS before installing.
-3. Run `Broadcast-Scheduler-0.2.0-Setup.exe`. It installs under `C:\ProgramData\obs-studio\plugins\broadcast-scheduler`.
+3. Run `Broadcast-Scheduler-0.2.1-Setup.exe`. It installs under `C:\ProgramData\obs-studio\plugins\broadcast-scheduler`.
 4. Open **Docks → Broadcast Scheduler**.
 
 For developers, a portable ZIP is also available in successful [Actions builds](https://github.com/alexdbdb/obs-scheduler/actions/workflows/build.yml). Extract its `broadcast-scheduler` folder into `C:\ProgramData\obs-studio\plugins`, preserving its paths. The package keeps its Qt dependencies inside the plugin folder. Portable OBS installations require the manual path described in the [OBS plugins guide](https://obsproject.com/kb/plugins-guide). Uninstalling the plugin retains its database and settings.

@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.2.0 — first public release
+## 0.2.1 — maintenance release
 
+- Removed the redundant status dashboard from the main dock to keep the scheduler compact.
 - Google Calendar with each user's own Desktop OAuth client and protected client-secret/token storage.
 - Direct Odoo Events import with event-type, stage and state filters.
 - Automatic Google/Odoo refresh at OBS startup and at the configured interval, using a rolling seven-day window.

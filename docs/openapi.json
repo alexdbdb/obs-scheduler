@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Broadcast Scheduler local API",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "license": {
       "name": "GPL-3.0-or-later (third-party terms apply)"
     }

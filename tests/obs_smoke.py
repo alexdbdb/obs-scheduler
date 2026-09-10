@@ -67,7 +67,7 @@ try:
     time.sleep(1)
     obs = subprocess.Popen(['obs', '--multi', '--disable-missing-files-check', '--disable-updater'], env=env, stdout=output, stderr=output)
     processes.append(obs)
-    wait_for(lambda: request('GET', '/status')['version'] == '0.2.0', 60)
+    wait_for(lambda: request('GET', '/status')['version'] == '0.2.1', 60)
     event = scheduled('Native recording smoke')
     wait_for(lambda: request('GET', '/status')['obs']['recording'])
     subprocess.run(['import', '-window', 'root', str(artifacts / 'obs-dock.png')], env=env, check=True)

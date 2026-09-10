@@ -102,7 +102,7 @@ def wait_for(predicate, seconds=45):
 
 
 try:
-    wait_for(lambda: request("GET", "/status")["version"] == "0.2.0", 60)
+    wait_for(lambda: request("GET", "/status")["version"] == "0.2.1", 60)
     start = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=5)
     event = request("POST", "/events", {
         "title": "Community release test", "start": start.isoformat(),
