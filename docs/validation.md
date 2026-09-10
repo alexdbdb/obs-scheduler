@@ -1,6 +1,6 @@
 # Validation and release status
 
-Version 0.2.0-beta.1 is a public beta candidate. Evidence below describes local Windows checks on 10 September 2026. It has not yet been published.
+Version 0.2.0 is a public public release. Evidence below describes local Windows checks on 10 September 2026. It has not yet been published.
 
 ## Verified locally
 
@@ -18,7 +18,7 @@ The OAuth test covers Client ID validation, authorization URL, PKCE, repeated cl
 
 ## Still to qualify
 
-- Fresh real-account Google/Odoo verification from the final beta installer. Each Google project is user-owned; no shared developer client is submitted for verification.
+- Fresh real-account Google/Odoo verification from the final release installer. Each Google project is user-owned; no shared developer client is submitted for verification.
 - Both Odoo protocols against separate real 16–19 servers, startup refresh while offline and reconnection after token expiry.
 - Visual inspection, screenshots, high-DPI layout and keyboard accessibility of the final UI. The Windows Computer Use service was unavailable; native locale parsing and real OBS execution do not replace a visual check.
 - Production installer elevation, legacy-install migration and reboot/startup behavior in a clean Windows VM.

@@ -8,7 +8,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPS = ROOT / ".deps"
-VERSION = "0.2.0-beta.1"
+VERSION = "0.2.0"
 
 
 def git(*arguments, cwd=ROOT):

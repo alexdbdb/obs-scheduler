@@ -1,10 +1,10 @@
 ; OBS's per-plugin layout. No files are written to the OBS application directory.
 #define ProductName "Broadcast Scheduler"
 #ifndef ProductVersion
-  #define ProductVersion "0.2.0-beta.1"
+  #define ProductVersion "0.2.0"
 #endif
 #ifndef StageDir
-  #define StageDir "..\artifacts\windows-0.2.0-beta.1"
+  #define StageDir "..\artifacts\windows-0.2.0"
 #endif
 
 [Setup]

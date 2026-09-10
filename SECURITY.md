@@ -1,6 +1,6 @@
 # Security policy
 
-The 0.2 beta series is the current development line. Version 0.1.0 is obsolete and should not be redistributed. Security fixes will target the latest release; there is no long-term-support branch.
+The 0.2 release series is the current development line. Version 0.1.0 is obsolete and should not be redistributed. Security fixes will target the latest release; there is no long-term-support branch.
 
 ## Report a vulnerability
 

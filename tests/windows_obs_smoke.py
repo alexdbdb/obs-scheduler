@@ -102,10 +102,10 @@ def wait_for(predicate, seconds=45):
 
 
 try:
-    wait_for(lambda: request("GET", "/status")["version"] == "0.2.0-beta.1", 60)
+    wait_for(lambda: request("GET", "/status")["version"] == "0.2.0", 60)
     start = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=5)
     event = request("POST", "/events", {
-        "title": "Community beta test", "start": start.isoformat(),
+        "title": "Community release test", "start": start.isoformat(),
         "end": (start + dt.timedelta(seconds=4)).isoformat()})
     wait_for(lambda: request("GET", "/status")["obs"]["recording"])
     wait_for(lambda: not request("GET", "/status")["obs"]["recording"])
@@ -113,7 +113,7 @@ try:
         actions = conn.execute(
             "SELECT action,result FROM executions WHERE event_id=?", (event["id"],)).fetchall()
     assert sorted(actions) == [("record.start", "succeeded"), ("record.stop", "succeeded")], actions
-    files = list(recordings.glob("*Community beta test*.mkv"))
+    files = list(recordings.glob("*Community release test*.mkv"))
     assert files and files[0].stat().st_size > 1000, "No recorded media with event filename"
     assert files[0].name.startswith(start.astimezone().strftime("%Y-%m-%d")), files[0].name
     for days, title in [(1, "Workshop — test calendar"), (2, "Community livestream rehearsal")]:

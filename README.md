@@ -4,11 +4,11 @@
 
 Schedule the start and end of OBS recordings from manual events, recurring events, ICS calendars, Google Calendar, Odoo Events or a local API. External credentials are supplied locally by each user.
 
-**Beta candidate 0.2.0-beta.1.** Target: Windows x64, OBS 32.2.2 / Qt 6.11.1. Google and Odoo synchronization have been confirmed by a user; unattended operation under failure conditions still needs qualification. See [validation](docs/validation.md).
+**Version 0.2.0.** Target: Windows x64, OBS 32.2.2 / Qt 6.11.1. Google and Odoo synchronization have been confirmed by a user; unattended operation under failure conditions still needs qualification. See [validation](docs/validation.md).
 
 ## Download
 
-The next public beta is being prepared. Use [GitHub Releases](https://github.com/alexdbdb/obs-scheduler/releases) once **0.2.0-beta.1** is published. The historical 0.1.0 installer is obsolete.
+Download the Windows installer from [GitHub Releases](https://github.com/alexdbdb/obs-scheduler/releases), or build it locally.
 
 Close OBS, run the installer, and reopen OBS. No source-code download or compilation is needed. See [release notes](CHANGELOG.md) for compatibility and limitations. While the repository is private, downloads require signing in with an account that has access.
 
@@ -32,9 +32,9 @@ The plugin uses the device timezone for manual times and display. It does not pr
 
 Builds target **OBS 32.2.2 x64 with Qt 6.11.1**. Other OBS/Qt combinations are not validated.
 
-1. Download the 0.2.0-beta.1 Windows installer from [Releases](https://github.com/alexdbdb/obs-scheduler/releases) when available, or build it locally.
-2. Close OBS. If upgrading from 0.1.0, uninstall the old plugin first; its database is retained.
-3. Run `Broadcast-Scheduler-0.2.0-beta.1-Setup.exe`. It installs under `C:\ProgramData\obs-studio\plugins\broadcast-scheduler`.
+1. Download the 0.2.0 Windows installer from [Releases](https://github.com/alexdbdb/obs-scheduler/releases) when available, or build it locally.
+2. Close OBS before installing.
+3. Run `Broadcast-Scheduler-0.2.0-Setup.exe`. It installs under `C:\ProgramData\obs-studio\plugins\broadcast-scheduler`.
 4. Open **Docks → Broadcast Scheduler**.
 
 For developers, a portable ZIP is also available in successful [Actions builds](https://github.com/alexdbdb/obs-scheduler/actions/workflows/build.yml). Extract its `broadcast-scheduler` folder into `C:\ProgramData\obs-studio\plugins`, preserving its paths. The package keeps its Qt dependencies inside the plugin folder. Portable OBS installations require the manual path described in the [OBS plugins guide](https://obsproject.com/kb/plugins-guide). Uninstalling the plugin retains its database and settings.
@@ -47,13 +47,13 @@ Configure a writable recording destination in OBS. Click **Schedule Recording**,
 
 A recording started manually in OBS is left untouched. Scheduled recordings use `YYYY-MM-DD - Event name` as the filename while retaining OBS's configured folder and extension. Invalid filename characters are replaced. Overlapping or adjacent scheduled events share a recording and retain the name of the event that started it; they do not necessarily produce separate files. A start more than 60 seconds late is skipped, and a finished event is never started late. Pausing prevents new starts but preserves stops already scheduled for recordings in progress.
 
-Upgrading from the earlier template-based version pauses existing schedules for review. Each enabled event now means recording from its start to its end.
+Each enabled event records from its start to its end.
 
 ## Calendars and API
 
 Add an HTTPS ICS URL or a local ICS file in **Calendars**, or configure Google/Odoo from **Settings**. Google and Odoo synchronize automatically when OBS opens and then at each configured refresh interval, keeping a rolling seven-day window (including events already in progress). External events cannot be edited in the agenda, but deleting one hides it locally across future synchronizations without deleting it from the source. Use Ctrl+click to select multiple upcoming events and Delete or the Delete key to remove them together. Removing and re-adding the calendar clears these local exclusions. Recurrences are managed separately.
 
-The API is disabled by default and binds to `127.0.0.1`. Generate a token in Settings → API before enabling it. See [API examples](docs/api.md) and [OpenAPI](docs/openapi.json). Only loopback connections are supported; non-local addresses are rejected. Previous network bindings migrate to localhost at startup.
+The API is disabled by default and binds to `127.0.0.1`. Generate a token in Settings → API before enabling it. See [API examples](docs/api.md) and [OpenAPI](docs/openapi.json). Only loopback connections are supported; non-local addresses are rejected.
 
 ## Development and limitations
 

@@ -1,6 +1,6 @@
 # Preparing and publishing a release
 
-Release target: Windows x64, OBS 32.2.2 / Qt 6.11.1. Label the initial community release a **beta**. Do not claim all OBS 32 versions, Linux runtime or macOS support.
+Release target: Windows x64, OBS 32.2.2 / Qt 6.11.1. This is the initial community release. Do not claim all OBS 32 versions, Linux runtime or macOS support.
 
 ## Before the first public release
 
@@ -23,7 +23,7 @@ These account-side actions require the maintainer's Google Cloud and GitHub acce
 
 ## GitHub release
 
-Push a reviewed v0.2.0-beta.1 tag after the account-side checks and qualification. The build workflow runs tests and creates a **draft prerelease** with Windows packages, corresponding sources and checksums. Review all assets and release notes before publishing the draft. The workflow never changes repository visibility.
+Push a reviewed v0.2.0 tag after the account-side checks and qualification. The build workflow runs tests and creates a **draft release** with Windows packages, corresponding sources and checksums. Review all assets and release notes before publishing the draft. The workflow never changes repository visibility.
 
 Only make the repository public after the historical-client and release-asset checks are complete. The installer is currently unsigned; users may see Windows reputation warnings. Signing can be added when a publisher certificate is available.
 
@@ -31,6 +31,6 @@ Only make the repository public after the historical-client and release-asset ch
 
 Use the [OBS community resources](https://obsproject.com/forum/resources/) and clearly describe this as an independent community plugin. Suggested English description:
 
-> Schedule OBS recordings from manual events, recurring schedules, ICS, Google Calendar or Odoo Events. Google and Odoo synchronize directly using your own credentials, with a rolling seven-day window. Includes English and Spanish interfaces. Windows x64 beta, tested against OBS 32.2.2. OBS must remain running and the computer awake.
+> Schedule OBS recordings from manual events, recurring schedules, ICS, Google Calendar or Odoo Events. Google and Odoo synchronize directly using your own credentials, with a rolling seven-day window. Includes English and Spanish interfaces. Windows x64 release, tested against OBS 32.2.2. OBS must remain running and the computer awake.
 
 Include screenshots, installation/upgrade instructions, the exact supported OBS version, source/license links, known limitations and a support link. Do not imply OBS Project endorsement.

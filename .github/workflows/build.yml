@@ -84,10 +84,10 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          test "$RELEASE_TAG" = "v0.2.0-beta.1"
-      - name: Create draft beta for maintainer review
+          test "$RELEASE_TAG" = "v0.2.0"
+      - name: Create draft release for maintainer review
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$RELEASE_TAG" release/* --verify-tag --draft --prerelease --title "Broadcast Scheduler ${RELEASE_TAG}" --notes-file CHANGELOG.md
+          gh release create "$RELEASE_TAG" release/* --verify-tag --draft --title "Broadcast Scheduler ${RELEASE_TAG}" --notes-file CHANGELOG.md
