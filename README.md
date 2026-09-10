@@ -8,7 +8,9 @@ Schedule the start and end of OBS recordings from manual events, recurring event
 
 ## Download
 
-Download the Windows installer from [GitHub Releases](https://github.com/alexdbdb/obs-scheduler/releases), or build it locally.
+[**Download the Windows installer (.exe)**](https://github.com/alexdbdb/obs-scheduler/releases/download/v0.2.0/Broadcast-Scheduler-0.2.0-Setup.exe) · [View all release files](https://github.com/alexdbdb/obs-scheduler/releases)
+
+Alternatively, build it locally.
 
 Close OBS, run the installer, and reopen OBS. No source-code download or compilation is needed. See [release notes](CHANGELOG.md) for compatibility and limitations.
 
@@ -32,7 +34,7 @@ The plugin uses the device timezone for manual times and display. It does not pr
 
 Builds target **OBS 32.2.2 x64 with Qt 6.11.1**. Other OBS/Qt combinations are not validated.
 
-1. Download the 0.2.0 Windows installer from [Releases](https://github.com/alexdbdb/obs-scheduler/releases), or build it locally.
+1. Download the [0.2.0 Windows installer](https://github.com/alexdbdb/obs-scheduler/releases/download/v0.2.0/Broadcast-Scheduler-0.2.0-Setup.exe), or build it locally.
 2. Close OBS before installing.
 3. Run `Broadcast-Scheduler-0.2.0-Setup.exe`. It installs under `C:\ProgramData\obs-studio\plugins\broadcast-scheduler`.
 4. Open **Docks → Broadcast Scheduler**.
