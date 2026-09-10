@@ -1,31 +1,46 @@
-; Broadcast Scheduler Windows installer.
-; The plugin is installed into an existing OBS Studio 32.x installation.
-
+; OBS's per-plugin layout. No files are written to the OBS application directory.
 #define ProductName "Broadcast Scheduler"
-#define ProductVersion "0.1.0"
-#define ProductPublisher "alexdbdb and contributors"
-#define StageDir "..\artifacts\windows"
+#ifndef ProductVersion
+  #define ProductVersion "0.2.0-beta.1"
+#endif
+#ifndef StageDir
+  #define StageDir "..\artifacts\windows-0.2.0-beta.1"
+#endif
 
 [Setup]
-AppId={{B7B6C6A8-EC02-4F9C-BAC6-7E50170B5B18}
+; Separate identity prevents upgrades from reusing the legacy OBS directory.
+#ifdef PackageTest
+AppId={{7CFEE71A-235A-460F-9AB2-DAEDBB54805A}
+#else
+AppId={{46A7B887-BA15-4527-AD73-164C050DCC92}
+#endif
 AppName={#ProductName}
 AppVersion={#ProductVersion}
 AppVerName={#ProductName} {#ProductVersion}
-AppPublisher={#ProductPublisher}
+AppPublisher=alexdbdb and contributors
 AppPublisherURL=https://github.com/alexdbdb/obs-scheduler
-DefaultDirName={code:GetDefaultOBSPath}
+DefaultDirName={commonappdata}\obs-studio\plugins\broadcast-scheduler
+DisableDirPage=yes
 DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#ifdef PackageTest
+PrivilegesRequired=lowest
+#else
 PrivilegesRequired=admin
+#endif
 OutputDir=..\artifacts
+#ifdef PackageTest
+OutputBaseFilename=Broadcast-Scheduler-{#ProductVersion}-InstallerTest
+#else
 OutputBaseFilename=Broadcast-Scheduler-{#ProductVersion}-Setup
+#endif
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 LicenseFile=..\licenses\GPL-3.0.txt
 Uninstallable=yes
-UninstallFilesDir={app}\uninstall\Broadcast Scheduler
+UninstallFilesDir={app}\uninstall
 CloseApplications=yes
 RestartApplications=no
 ChangesEnvironment=no
@@ -35,74 +50,28 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Messages]
-WelcomeLabel2=This wizard installs Broadcast Scheduler into an existing OBS Studio installation.%n%nClose OBS Studio before continuing. Your scheduler database and settings are kept when the plugin is uninstalled.
+english.WelcomeLabel2=This wizard installs Broadcast Scheduler for OBS Studio 32.2.2 (64-bit).%n%nClose OBS before continuing. If upgrading from 0.1.0, uninstall the old plugin first. Your database and settings are retained.
+spanish.WelcomeLabel2=Este asistente instala Broadcast Scheduler para OBS Studio 32.2.2 (64 bits).%n%nCierra OBS antes de continuar. Si actualizas desde 0.1.0, desinstala primero el plugin anterior. Se conservan la base de datos y los ajustes.
+
+[CustomMessages]
+english.LegacyInstall=Broadcast Scheduler 0.1.0 is still installed. Close OBS and uninstall the old plugin from Windows Settings before installing this version. Your scheduler database and settings are retained.
+spanish.LegacyInstall=Broadcast Scheduler 0.1.0 sigue instalado. Cierra OBS y desinstala el plugin anterior desde Configuración de Windows antes de instalar esta versión. Se conservan la base de datos y los ajustes.
 
 [Files]
-Source: "{#StageDir}\obs-plugins\64bit\broadcast-scheduler.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
-Source: "{#StageDir}\data\obs-plugins\broadcast-scheduler\*"; DestDir: "{app}\data\obs-plugins\broadcast-scheduler"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#StageDir}\bin\64bit\Qt6HttpServer.dll"; DestDir: "{app}\bin\64bit"; Flags: ignoreversion
-Source: "{#StageDir}\bin\64bit\Qt6WebSockets.dll"; DestDir: "{app}\bin\64bit"; Flags: ignoreversion
-
-[UninstallDelete]
-Type: dirifempty; Name: "{app}\uninstall"
+Source: "{#StageDir}\broadcast-scheduler\bin\64bit\*.dll"; DestDir: "{app}\bin\64bit"; Flags: ignoreversion
+Source: "{#StageDir}\broadcast-scheduler\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Code]
-function IsOBSInstall(const Path: string): Boolean;
-begin
-  Result := FileExists(AddBackslash(Path) + 'bin\64bit\obs64.exe') or
-            FileExists(AddBackslash(Path) + 'obs64.exe');
-end;
-
-function RegistryOBSPath(RootKey: Integer; const KeyName: string): string;
-begin
-  Result := '';
-  RegQueryStringValue(RootKey, 'SOFTWARE\OBS Studio', 'InstallPath', Result);
-  if (Result = '') then
-    RegQueryStringValue(RootKey, KeyName, 'InstallPath', Result);
-  if not IsOBSInstall(Result) then
-    Result := '';
-end;
-
-function GetDefaultOBSPath(Param: string): string;
+function InitializeSetup(): Boolean;
 var
-  Candidate: string;
+  LegacyKey: string;
 begin
-  Candidate := RegistryOBSPath(HKLM64, 'SOFTWARE\OBS Studio');
-  if Candidate <> '' then begin
-    Result := Candidate;
-    exit;
-  end;
-
-  Candidate := RegistryOBSPath(HKCU, 'SOFTWARE\OBS Studio');
-  if Candidate <> '' then begin
-    Result := Candidate;
-    exit;
-  end;
-
-  Candidate := ExpandConstant('{autopf}\obs-studio');
-  if IsOBSInstall(Candidate) then begin
-    Result := Candidate;
-    exit;
-  end;
-
-  Candidate := ExpandConstant('{localappdata}\Programs\obs-studio');
-  if IsOBSInstall(Candidate) then begin
-    Result := Candidate;
-    exit;
-  end;
-
-  Result := ExpandConstant('{autopf}\obs-studio');
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-begin
+#ifdef PackageTest
   Result := True;
-  if CurPageID = wpSelectDir then begin
-    if not IsOBSInstall(ExpandConstant('{app}')) then begin
-      MsgBox('The selected folder does not contain a 64-bit OBS Studio installation.' + #13#10 +
-             'Select the folder that contains the bin and obs-plugins folders.',
-             mbError, MB_OK);
-      Result := False;
-    end;
-  end;
+#else
+  LegacyKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{B7B6C6A8-EC02-4F9C-BAC6-7E50170B5B18}_is1';
+  Result := not (RegKeyExists(HKLM64, LegacyKey) or RegKeyExists(HKCU, LegacyKey));
+  if not Result then
+    MsgBox(ExpandConstant('{cm:LegacyInstall}'), mbError, MB_OK);
+#endif
 end;

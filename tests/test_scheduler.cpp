@@ -1,6 +1,9 @@
 #include "calendar.hpp"
 #include "scheduler.hpp"
 #include "providers.hpp"
+#include "api.hpp"
+#include "messages.hpp"
+#include <QCryptographicHash>
 #include <QTcpSocket>
 #include <QUrlQuery>
 #include <QTemporaryDir>
@@ -17,6 +20,54 @@ class Tests : public QObject {
                          {"timezone", "Europe/Madrid"}});
   }
 private slots:
+  void localApiPolicy() {
+    Api api;
+    const auto hash = QString::fromLatin1(
+        QCryptographicHash::hash("test-only", QCryptographicHash::Sha256).toHex());
+    QJsonObject settings{{"api_enabled", true}, {"api_token_hash", hash},
+                         {"api_host", "0.0.0.0"}, {"api_port", 18766},
+                         {"api_network_acknowledged", true}};
+    QVERIFY_EXCEPTION_THROWN(api.configure(settings), Error);
+    QVERIFY(!api.running());
+    settings["api_host"] = "192.0.2.1";
+    QVERIFY_EXCEPTION_THROWN(api.configure(settings), Error);
+    settings["api_host"] = "::";
+    QVERIFY_EXCEPTION_THROWN(api.configure(settings), Error);
+  }
+  void diagnosticTranslation() {
+    MessageCatalog catalog(QJsonArray{
+        QJsonObject{{"key", "failed"}, {"source", "Calendar %1 failed: %2"}},
+        QJsonObject{{"key", "denied"}, {"source", "Access denied"}}});
+    auto spanish = [](const QString &key) {
+      return key == "failed" ? QString("Calendario %1 fallido: %2")
+           : key == "denied" ? QString("Acceso denegado") : key;
+    };
+    QCOMPARE(catalog.translate("Calendar work failed: Access denied", spanish),
+             QString("Calendario work fallido: Acceso denegado"));
+    QCOMPARE(catalog.translate("Calendar %2 failed: Access denied", spanish),
+             QString("Calendario %2 fallido: Acceso denegado"));
+    QCOMPARE(catalog.translate("Unrecognized external detail", spanish),
+             QString("Unrecognized external detail"));
+    QCOMPARE(catalog.translate("Calendar work failed: Access denied",
+                              [](const QString &key) { return key; }),
+             QString("Calendar work failed: Access denied"));
+  }
+  void formUrlEncoding() {
+    QCOMPARE(formUrlEncoded({{"plain", "safe-._~"},
+                             {"space", "a b"},
+                             {"plus", "a+b"},
+                             {"reserved", "a&b=c%2F"},
+                             {"unicode", QString::fromUtf8("España")}}),
+             QByteArray("plain=safe-._~&space=a%20b&plus=a%2Bb&"
+                        "reserved=a%26b%3Dc%252F&unicode=Espa%C3%B1a"));
+    QCOMPARE(googleApiError(
+                 R"({"error":{"code":403,"message":"Calendar API has not been used in project 123 before or it is disabled.","errors":[{"reason":"accessNotConfigured"}]}})",
+                 403),
+             QString("Calendar HTTP request failed (HTTP 403; "
+                     "accessNotConfigured; Calendar API has not been used in "
+                     "project 123 before or it is disabled.)"));
+  }
+
   void googleBrowserAuthorization() {
 #ifndef Q_OS_WIN
     QSKIP("Uses Windows DPAPI in an isolated temporary directory");
@@ -24,8 +75,18 @@ private slots:
     QTemporaryDir d;
     Store s(d.path() + "/db");
     Secrets secrets(d.path());
-    s.config("google", {{"client_id", "test.apps.googleusercontent.com"}});
     Providers p(s, secrets);
+    QVERIFY_EXCEPTION_THROWN(p.configureGoogle("not-a-client-id"), Error);
+    p.configureGoogle("test.apps.googleusercontent.com", "GOCSPX-test-secret");
+    QCOMPARE(p.googleStatus()["client_id"].toString(),
+             QString("test.apps.googleusercontent.com"));
+    QVERIFY(p.googleStatus()["client_secret_configured"].toBool());
+    QVERIFY(!p.googleStatus().contains("client_secret"));
+    QCOMPARE(secrets.read("google-client-secret"),
+             QByteArray("GOCSPX-test-secret"));
+    p.configureGoogle("test.apps.googleusercontent.com");
+    QCOMPARE(secrets.read("google-client-secret"),
+             QByteArray("GOCSPX-test-secret"));
     QSignalSpy opened(&p, &Providers::openUrl);
     QSignalSpy errors(&p, &Providers::problem);
     p.connectGoogle();
@@ -38,7 +99,7 @@ private slots:
     QVERIFY(auth.queryItemValue("scope").contains("calendar.calendarlist.readonly"));
     QVERIFY(!auth.hasQueryItem("client_secret"));
     QVERIFY(p.googleStatus()["connecting"].toBool());
-    QVERIFY(!p.googleStatus().contains("client_id"));
+    QVERIFY(p.googleStatus()["configured"].toBool());
     p.connectGoogle();
     QCOMPARE(opened.size(), 1); // Double-click must not create another attempt.
     const QUrl redirect(auth.queryItemValue("redirect_uri"));
@@ -66,6 +127,45 @@ private slots:
     QVERIFY(!p.googleStatus()["connecting"].toBool());
 #endif
   }
+  void odooConfiguration() {
+#ifndef Q_OS_WIN
+    QSKIP("Uses Windows DPAPI in an isolated temporary directory");
+#else
+    QTemporaryDir directory;
+    Store store(directory.path() + "/db");
+    Secrets secrets(directory.path());
+    Providers providers(store, secrets);
+    QVERIFY_EXCEPTION_THROWN(
+        providers.configureOdoo({{"url", "http://odoo.example.com"},
+                                 {"database", "demo"},
+                                 {"login", "user@example.com"}},
+                                "secret"),
+        Error);
+    const QJsonObject configuration{
+        {"url", "https://odoo.example.com"},
+        {"database", "demo"},
+        {"login", "user@example.com"},
+        {"protocol", "jsonrpc"},
+        {"enabled", true},
+        {"refresh_minutes", 20}};
+    providers.configureOdoo(configuration, "test-api-key");
+    const auto status = providers.odooStatus();
+    QVERIFY(status["configured"].toBool());
+    QVERIFY(status["api_key_configured"].toBool());
+    QVERIFY(!status.contains("api_key"));
+    QVERIFY(!store.config("odoo").contains("api_key"));
+    QCOMPARE(secrets.read("odoo-api-key"), QByteArray("test-api-key"));
+    QCOMPARE(store.config("calendars")["items"].toArray().size(), 1);
+    QCOMPARE(store.config("calendars")["items"].toArray().first().toObject()["id"],
+             QJsonValue("odoo-events"));
+    providers.configureOdoo(configuration);
+    QCOMPARE(secrets.read("odoo-api-key"), QByteArray("test-api-key"));
+    providers.disconnectOdoo();
+    QVERIFY(!providers.odooStatus()["configured"].toBool());
+    QVERIFY(secrets.read("odoo-api-key").isEmpty());
+    QVERIFY(store.config("calendars")["items"].toArray().isEmpty());
+#endif
+  }
   void initTestCase() { CalendarParser::setZoneDirectory(qEnvironmentVariable("BS_ZONEINFO")); }
   void offsets() {
     auto e = sample();
@@ -79,6 +179,11 @@ private slots:
     auto round = Event::parse(e.json());
     QCOMPARE(round.start, e.start);
     QCOMPARE(round.timezone, e.timezone);
+    e.source = "OdooEvent";
+    e.calendar = "odoo-events";
+    e.externalId = "event.event/42";
+    e.validate();
+    QCOMPARE(Event::parse(e.json()).source, QString("OdooEvent"));
     for (const auto value : {0LL, 1789066800123LL, now()})
       QCOMPARE(instant(iso(value)).toMSecsSinceEpoch(), value);
     QVERIFY_EXCEPTION_THROWN(instant("2026-01-01T12:00:00"), Error);
@@ -337,6 +442,43 @@ private slots:
     QCOMPARE(s.events().size(), 1);
     s.replaceCalendar("feed", {});
     QCOMPARE(s.events().size(), 0);
+  }
+  void recordingFilenameUsesEventDateAndSafeTitle() {
+    auto event = sample();
+    event.start = QDateTime(QDate(2026, 9, 10), QTime(12, 0),
+                            QTimeZone::systemTimeZone())
+                      .toMSecsSinceEpoch();
+    event.title = "  Gala: 50% / Final?  ";
+    QCOMPARE(recordingFilename(event),
+             QString("2026-09-10 - Gala_ 50_ _ Final_"));
+    event.title = "<>:\"/\\|?*%";
+    QCOMPARE(recordingFilename(event), QString("2026-09-10 - _"));
+  }
+  void ignoredExternalEventPersists() {
+    QTemporaryDir d;
+    const auto path = d.path() + "/db";
+    auto e = sample();
+    e.calendar = "google-calendar";
+    e.externalId = "google-event";
+    e.source = "GoogleCalendar";
+    {
+      Store s(path);
+      s.replaceCalendar(e.calendar, {e});
+      QCOMPARE(s.events().size(), 1);
+      s.ignoreExternal(s.events().first());
+      QCOMPARE(s.events().size(), 0);
+      s.replaceCalendar(e.calendar, {e});
+      QCOMPARE(s.events().size(), 0);
+    }
+    {
+      Store s(path);
+      QCOMPARE(s.query("PRAGMA user_version").first().toObject()["user_version"].toInt(), 2);
+      s.replaceCalendar(e.calendar, {e});
+      QCOMPARE(s.events().size(), 0);
+      s.clearIgnored(e.calendar);
+      s.replaceCalendar(e.calendar, {e});
+      QCOMPARE(s.events().size(), 1);
+    }
   }
 };
 QTEST_GUILESS_MAIN(Tests)

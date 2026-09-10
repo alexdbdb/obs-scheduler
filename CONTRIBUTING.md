@@ -8,4 +8,8 @@ Build using [the documented workflow](docs/build.md) and run the scheduler/API t
 
 Contributions should keep recording scheduling simple. Providers publish normalized events; the OBS adapter owns output calls. Use device-local time for user input and UTC instants internally. Preserve existing user databases and ownership protection.
 
-Source contributions are provided under GPL-2.0-or-later, consistent with this repository. Generated files, build directories, downloaded dependencies and credentials must not be committed.
+Source contributions are provided under GPL-3.0-or-later, consistent with this repository. Generated files, build directories, downloaded dependencies and credentials must not be committed.
+
+English is the canonical documentation and UI source language. Keep the Spanish catalog in sync. Run the locale checker after changing labels or diagnostics. Diagnostic message templates live in data/messages.json; translations use the same keys in both locale files. API responses and stored logs remain English for compatibility; the OBS interface translates them when displayed. External service details are preserved.
+
+Follow [SECURITY.md](SECURITY.md) for vulnerability reports and [the release process](docs/releasing.md) for distribution.

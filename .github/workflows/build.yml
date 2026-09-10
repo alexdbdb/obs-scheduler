@@ -3,7 +3,19 @@ on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/release-audit.py --history
+      - run: python tests/check_locales.py
   windows:
+    needs: audit
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -26,19 +38,25 @@ jobs:
       - name: Build OBS SDK, plugin and package
         shell: pwsh
         run: ./scripts/build-windows.ps1
+      - name: Package corresponding sources for tagged releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python scripts/package-sources.py
       - uses: actions/upload-artifact@v4
         with:
           name: broadcast-scheduler-windows-x64
           if-no-files-found: error
           path: |
-            artifacts/broadcast-scheduler-0.1.0-windows-x64.zip
-            artifacts/Broadcast-Scheduler-0.1.0-Setup.exe
+            artifacts/broadcast-scheduler-*-windows-x64.zip
+            artifacts/Broadcast-Scheduler-*-Setup.exe
+            artifacts/SHA256SUMS-*.txt
+            artifacts/broadcast-scheduler-*-sources.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-test-logs
           path: build-windows/Testing/Temporary/
   linux:
+    needs: audit
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -50,3 +68,26 @@ jobs:
         with:
           name: broadcast-scheduler-linux
           path: build/broadcast-scheduler.so
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: broadcast-scheduler-windows-x64
+          path: release
+      - name: Check tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$RELEASE_TAG" = "v0.2.0-beta.1"
+      - name: Create draft beta for maintainer review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" release/* --verify-tag --draft --prerelease --title "Broadcast Scheduler ${RELEASE_TAG}" --notes-file CHANGELOG.md

@@ -20,6 +20,8 @@ public:
   void put(Event e);
   void put(const Template &t);
   void erase(const QString &id);
+  void ignoreExternal(const Event &event);
+  void clearIgnored(const QString &calendar);
   void replaceCalendar(const QString &id, const QList<Event> &events);
   QJsonObject config(const QString &key) const;
   void config(const QString &key, const QJsonObject &value);

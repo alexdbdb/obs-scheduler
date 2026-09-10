@@ -1,0 +1,24 @@
+name: Bug report
+description: Report a reproducible problem
+body:
+  - type: markdown
+    attributes:
+      value: "Remove tokens, client secrets, private calendar URLs and personal event data. For security issues, follow SECURITY.md."
+  - type: input
+    id: versions
+    attributes:
+      label: Plugin, OBS and operating system versions
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Do not upload your scheduler database, OBS profile or credentials.

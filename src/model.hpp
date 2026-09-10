@@ -41,6 +41,7 @@ struct Event {
   static Event parse(const QJsonObject &o);
   void validate() const;
 };
+QString recordingFilename(const Event &event);
 struct Due {
   Event event;
   Action action;

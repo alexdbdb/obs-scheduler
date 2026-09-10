@@ -1,6 +1,7 @@
 #include "obs-adapter.hpp"
 #include <QThread>
 #include <QTimer>
+#include <util/config-file.h>
 namespace bs {
 ObsAdapter::ObsAdapter(QObject *parent) : QObject(parent) {
   obs_frontend_add_event_callback(callback, this);
@@ -73,7 +74,21 @@ Outcome ObsAdapter::execute(const Due &d, const QJsonObject &) {
     }
     starting = true;
     stopWhenStarted = false;
+    auto *profile = obs_frontend_get_profile_config();
+    QByteArray previousFormat;
+    if (profile) {
+      const auto *value =
+          config_get_string(profile, "Output", "FilenameFormatting");
+      if (value)
+        previousFormat = value;
+      const auto format = recordingFilename(d.event).toUtf8();
+      config_set_string(profile, "Output", "FilenameFormatting",
+                        format.constData());
+    }
     obs_frontend_recording_start();
+    if (profile)
+      config_set_string(profile, "Output", "FilenameFormatting",
+                        previousFormat.constData());
     QTimer::singleShot(30000, this, [this] {
       if (starting) {
         for (const auto &key : startKeys)

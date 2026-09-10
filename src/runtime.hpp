@@ -34,6 +34,7 @@ signals:
   void problem(QString message);
   void openUrl(QString url);
   void googleCalendars(QJsonArray calendars);
+  void odooOptions(QJsonObject options);
   void tokenGenerated(QString token);
 };
 } // namespace bs

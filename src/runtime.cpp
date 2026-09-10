@@ -37,6 +37,9 @@ void Runtime::start() {
     settings["record_existing"] = "leave";
     settings["allow_unowned_stop"] = false;
     settings["advanced_actions"] = false;
+    // Migrate previously network-exposed configurations to the local API.
+    settings["api_host"] = "127.0.0.1";
+    settings.remove("api_network_acknowledged");
     store->config("settings", settings);
     migrateRecordingSchedule();
     scheduler = std::make_unique<Scheduler>(*store);
@@ -50,6 +53,8 @@ void Runtime::start() {
     connect(providers, &Providers::openUrl, this, &Runtime::openUrl);
     connect(providers, &Providers::googleCalendars, this,
             &Runtime::googleCalendars);
+    connect(providers, &Providers::odooOptions, this,
+            &Runtime::odooOptions);
     connect(providers, &Providers::changed, this, &Runtime::snapshot);
     api->call = [this](QString op, QJsonObject data) {
       return request(op, data);
@@ -60,6 +65,9 @@ void Runtime::start() {
       emit problem(QString::fromUtf8(e.what()));
     }
     expandRecurrences();
+    // Refresh remote calendars once per OBS session immediately, then let
+    // each calendar's configured interval govern subsequent rolling updates.
+    providers->sync(true);
     timer = new QTimer(this);
     timer->setTimerType(Qt::PreciseTimer);
     timer->setInterval(250);
@@ -76,7 +84,7 @@ void Runtime::start() {
       }
     });
     timer->start();
-    store->log("info", "Broadcast Scheduler 0.1.0 started");
+    store->log("info", "Broadcast Scheduler " PLUGIN_VERSION " started");
     snapshot();
   } catch (const std::exception &e) {
     emit problem(QString::fromUtf8(e.what()));
@@ -119,6 +127,7 @@ void Runtime::snapshot() {
       {"calendars", store->config("calendars")},
       {"recurrences", store->config("recurrences")},
       {"google", providers ? providers->googleStatus() : QJsonObject{}},
+      {"odoo", providers ? providers->odooStatus() : QJsonObject{}},
       {"history", store->history()},
       {"logs", store->query("SELECT * FROM logs ORDER BY id DESC LIMIT 500")},
       {"database", path},
@@ -172,7 +181,7 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     return QJsonObject{{"_status", status}, {"error", message}};
   };
   if (op == "GET /api/v1/status")
-    return {{"version", "0.1.0"},
+    return {{"version", PLUGIN_VERSION},
             {"scheduler_enabled",
              store->config("settings")["enabled"].toBool(true)},
             {"api_running", api->running()},
@@ -203,15 +212,26 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     }
     if (prefix == "GET")
       return e.json();
-    if (e.source != "Manual" && e.source != "API")
+    const bool writable = e.source == "Manual" || e.source == "API";
+    const bool imported = !e.calendar.isEmpty() && !e.externalId.isEmpty();
+    if (prefix == "DELETE") {
+      if (writable) {
+        store->erase(e.id);
+        store->log("info", "Event deleted: " + e.id);
+        return {{"deleted", e.id}};
+      }
+      if (imported) {
+        store->ignoreExternal(e);
+        store->log("info", "External event excluded locally: " + e.id);
+        return {{"deleted", e.id}, {"local_only", true}};
+      }
       return failure(
           409,
-          "External and recurring events are read-only; edit their source");
-    if (prefix == "DELETE") {
-      store->erase(e.id);
-      store->log("info", "Event deleted: " + e.id);
-      return {{"deleted", e.id}};
+          "Recurring events are read-only; edit their recurrence rule");
     }
+    if (!writable)
+      return failure(409, "External and recurring events are read-only; edit "
+                          "their source");
   }
   if (op == "event.save" || op == "POST /api/v1/events" || prefix == "PUT") {
     data["source"] = op == "event.save" ? "Manual" : "API";
@@ -240,10 +260,15 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
   }
   if (op == "event.delete") {
     auto e = store->event(data["id"].toString());
-    if (e.source != "Manual" && e.source != "API")
-      throw Error("External events are read-only");
-    store->erase(e.id);
-    store->log("info", "Event deleted: " + e.id);
+    if (e.source == "Manual" || e.source == "API") {
+      store->erase(e.id);
+      store->log("info", "Event deleted: " + e.id);
+    } else if (!e.calendar.isEmpty() && !e.externalId.isEmpty()) {
+      store->ignoreExternal(e);
+      store->log("info", "External event excluded locally: " + e.id);
+    } else {
+      throw Error("Recurring events are read-only");
+    }
     return {};
   }
   if (op == "settings.save") {
@@ -286,14 +311,18 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     }
     data["items"] = normalized;
     QSet<QString> ids;
+    int odooCalendars = 0;
     for (auto v : data["items"].toArray()) {
       auto c = v.toObject();
       auto id = c["id"].toString();
       if (id.isEmpty() || ids.contains(id))
         throw Error("Calendar IDs must be unique");
       ids.insert(id);
-      if (!QStringList{"ics", "file", "google"}.contains(c["kind"].toString()))
+      if (!QStringList{"ics", "file", "google", "odoo"}.contains(c["kind"].toString()))
         throw Error("Invalid calendar provider");
+      if (c["kind"].toString() == "odoo" &&
+          (++odooCalendars > 1 || id != "odoo-events"))
+        throw Error("The Odoo calendar is managed in Settings");
       if (!QTimeZone(c["timezone"].toString("UTC").toUtf8()).isValid())
         throw Error("Unknown calendar timezone");
       if (c["kind"].toString() == "ics" &&
@@ -302,9 +331,13 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     }
     auto old = store->config("calendars");
     store->config("calendars", data);
-    for (auto v : old["items"].toArray())
-      if (!ids.contains(v.toObject()["id"].toString()))
-        store->replaceCalendar(v.toObject()["id"].toString(), {});
+    for (auto v : old["items"].toArray()) {
+      auto oldId = v.toObject()["id"].toString();
+      if (!ids.contains(oldId)) {
+        store->replaceCalendar(oldId, {});
+        store->clearIgnored(oldId);
+      }
+    }
     providers->sync(true);
     return {};
   }
@@ -349,12 +382,30 @@ QJsonObject Runtime::request(const QString &op, QJsonObject data) {
     providers->connectGoogle();
     return {};
   }
+  if (op == "google.configure") {
+    providers->configureGoogle(data["client_id"].toString(),
+                               data["client_secret"].toString());
+    return {};
+  }
   if (op == "google.disconnect") {
     providers->disconnectGoogle();
     return {};
   }
   if (op == "google.list") {
     providers->listGoogle();
+    return {};
+  }
+  if (op == "odoo.configure") {
+    providers->configureOdoo(data["configuration"].toObject(),
+                             data["api_key"].toString());
+    return {};
+  }
+  if (op == "odoo.disconnect") {
+    providers->disconnectOdoo();
+    return {};
+  }
+  if (op == "odoo.list") {
+    providers->listOdoo();
     return {};
   }
   if (op == "sync" || op == "POST /api/v1/sync") {

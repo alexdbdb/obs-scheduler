@@ -22,8 +22,8 @@ void Api::configure(const QJsonObject &s) {
     throw Error("Generate an API token before enabling the API");
   QHostAddress address(s["api_host"].toString("127.0.0.1"));
   if (address.isNull()) throw Error("API host must be a numeric IP address");
-  if (!address.isLoopback() && !s["api_network_acknowledged"].toBool())
-    throw Error("Network exposure requires explicit acknowledgement");
+  if (!address.isLoopback())
+    throw Error("The API is available only on localhost (127.0.0.1 or ::1)");
   const int port = s["api_port"].toInt(8766);
   if (port < 1024 || port > 65535) throw Error("API port must be 1024–65535");
   if (listener && listener->serverAddress() == address && listener->serverPort() == port) {

@@ -56,7 +56,7 @@ Store::Store(const QString &path) {
       "foreign_keys=ON;");
   auto v =
       query("PRAGMA user_version").first().toObject()["user_version"].toInt();
-  if (v > 1)
+  if (v > 2)
     throw Error(
         "Database was created by a newer plugin; refusing to modify it");
   if (v == 0)
@@ -70,8 +70,14 @@ Store::Store(const QString &path) {
         "NULL,actual INTEGER,result TEXT NOT NULL,message TEXT NOT NULL); "
         "CREATE TABLE deferred(key TEXT PRIMARY KEY,due INTEGER NOT NULL,state "
         "TEXT NOT NULL); CREATE TABLE logs(id INTEGER PRIMARY KEY,time INTEGER "
-        "NOT NULL,level TEXT NOT NULL,message TEXT NOT NULL); PRAGMA "
-        "user_version=1; COMMIT;");
+        "NOT NULL,level TEXT NOT NULL,message TEXT NOT NULL); CREATE TABLE "
+        "ignored_events(calendar TEXT NOT NULL,external_id TEXT NOT NULL,"
+        "created INTEGER NOT NULL,PRIMARY KEY(calendar,external_id)); PRAGMA "
+        "user_version=2; COMMIT;");
+  if (v == 1)
+    sql("BEGIN IMMEDIATE; CREATE TABLE ignored_events(calendar TEXT NOT NULL,"
+        "external_id TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY("
+        "calendar,external_id)); PRAGMA user_version=2; COMMIT;");
   run("UPDATE executions SET result='indeterminate',message='OBS exited after "
       "durable claim; not replayed automatically' WHERE result IN ('claimed','requested')");
 }
@@ -165,13 +171,39 @@ void Store::erase(const QString &id) {
       {id.size() + 1, id + "/"});
   ++generation;
 }
+void Store::ignoreExternal(const Event &e) {
+  if (e.calendar.isEmpty() || e.externalId.isEmpty())
+    throw Error("Event has no external provider identity");
+  sql("BEGIN IMMEDIATE");
+  try {
+    run("INSERT OR REPLACE INTO ignored_events VALUES(?,?,?)",
+        {e.calendar, e.externalId, now()});
+    run("DELETE FROM events WHERE id=?", {e.id});
+    run("DELETE FROM deferred WHERE substr(key,1,?)=?",
+        {e.id.size() + 1, e.id + "/"});
+    sql("COMMIT");
+    ++generation;
+  } catch (...) {
+    sql("ROLLBACK");
+    throw;
+  }
+}
+void Store::clearIgnored(const QString &calendar) {
+  run("DELETE FROM ignored_events WHERE calendar=?", {calendar});
+}
 void Store::replaceCalendar(const QString &id, const QList<Event> &list) {
   sql("BEGIN IMMEDIATE");
   try {
     QSet<QString> keep;
+    QSet<QString> ignored;
+    for (auto v : query("SELECT external_id FROM ignored_events WHERE calendar=?",
+                        {id}))
+      ignored.insert(v.toObject()["external_id"].toString());
     for (auto e : list) {
       if (e.calendar != id || e.externalId.isEmpty())
         throw Error("Invalid provider identity");
+      if (ignored.contains(e.externalId))
+        continue;
       put(e);
       keep.insert(e.externalId);
     }

@@ -2,6 +2,7 @@
 #include "obs-adapter.hpp"
 #include "ui.hpp"
 #include <QEventLoop>
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QMainWindow>
 #include <QPointer>
@@ -27,6 +28,7 @@ bs::ObsAdapter *adapter = nullptr;
 QPointer<bs::Dock> dock;
 bool frontendRegistered = false;
 bool dockRegistered = false;
+QString tlsLibraryPath;
 void shutdown() {
   if (!worker)
     return;
@@ -78,6 +80,15 @@ void frontend(obs_frontend_event e, void *) {
 }
 } // namespace
 bool obs_module_load(void) {
+#ifdef Q_OS_WIN
+  char *qtPath = obs_module_file("qt");
+  if (qtPath) {
+    tlsLibraryPath = QString::fromUtf8(qtPath);
+    bfree(qtPath);
+    if (QFileInfo(tlsLibraryPath).isDir())
+      QCoreApplication::addLibraryPath(tlsLibraryPath);
+  }
+#endif
   blog(LOG_INFO, "[broadcast-scheduler] version %s loaded", PLUGIN_VERSION);
   return true;
 }
@@ -175,4 +186,8 @@ void obs_module_unload(void) {
     frontendRegistered = false;
   }
   shutdown();
+  if (!tlsLibraryPath.isEmpty()) {
+    QCoreApplication::removeLibraryPath(tlsLibraryPath);
+    tlsLibraryPath.clear();
+  }
 }

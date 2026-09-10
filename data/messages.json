@@ -1,0 +1,558 @@
+[
+  {
+    "key": "MessageGoogleAuthorizationWasDenied",
+    "source": "Google authorization was denied"
+  },
+  {
+    "key": "MessageGoogleAccountConnected",
+    "source": "Google account connected"
+  },
+  {
+    "key": "MessageGoogleConnectionFailedCheckSecureCredentialStorageAnd",
+    "source": "Google connection failed. Check secure credential storage and try again."
+  },
+  {
+    "key": "MessageGoogleConnectionTimedOutClickConnectWithGoogle",
+    "source": "Google connection timed out. Click Connect with Google to try again."
+  },
+  {
+    "key": "MessageGoogleAccountDisconnectedCalendarsDisabled",
+    "source": "Google account disconnected; calendars disabled"
+  },
+  {
+    "key": "MessageGoogleOAuthClientIDRemoved",
+    "source": "Google OAuth client ID removed"
+  },
+  {
+    "key": "MessageGoogleOAuthClientIDUpdated",
+    "source": "Google OAuth client ID updated"
+  },
+  {
+    "key": "MessageEnterAValidGoogleDesktopOAuthClientID",
+    "source": "Enter a valid Google Desktop OAuth client ID"
+  },
+  {
+    "key": "MessageEnterAValidGoogleOAuthClientSecret",
+    "source": "Enter a valid Google OAuth client secret"
+  },
+  {
+    "key": "MessageEnterTheClientSecretSuppliedWithThisDesktop",
+    "source": "Enter the client secret supplied with this Desktop OAuth client"
+  },
+  {
+    "key": "MessageEnterYourGoogleDesktopOAuthClientIDIn",
+    "source": "Enter your Google Desktop OAuth client ID in Settings first"
+  },
+  {
+    "key": "MessageEnterTheClientSecretSuppliedWithYourGoogle",
+    "source": "Enter the client secret supplied with your Google Desktop OAuth client"
+  },
+  {
+    "key": "MessageCannotOpenOAuthLoopbackListener",
+    "source": "Cannot open OAuth loopback listener"
+  },
+  {
+    "key": "MessageAllowBothCalendarPermissionsToConnectGoogleCalendar",
+    "source": "Allow both calendar permissions to connect Google Calendar."
+  },
+  {
+    "key": "MessageConnectAGoogleAccountFirst",
+    "source": "Connect a Google account first"
+  },
+  {
+    "key": "MessageCalendarURLMustUseHTTPSWithoutUserinfo",
+    "source": "Calendar URL must use HTTPS without userinfo"
+  },
+  {
+    "key": "MessageCalendarResponseExceedsLimit",
+    "source": "Calendar response exceeds limit"
+  },
+  {
+    "key": "MessageGooglePaginationLimitExceeded",
+    "source": "Google pagination limit exceeded"
+  },
+  {
+    "key": "MessageInvalidGoogleEventsResponse",
+    "source": "Invalid Google events response"
+  },
+  {
+    "key": "MessageGoogleEventIDMissing",
+    "source": "Google event ID missing"
+  },
+  {
+    "key": "MessageOdooURLMustBeAnHTTPSOriginWithout",
+    "source": "Odoo URL must be an HTTPS origin without credentials, query or fragment"
+  },
+  {
+    "key": "MessageUnsupportedOdooAPIProtocol",
+    "source": "Unsupported Odoo API protocol"
+  },
+  {
+    "key": "MessageOdooAPIKeyIsTooLong",
+    "source": "Odoo API key is too long"
+  },
+  {
+    "key": "MessageEnterTheOdooDatabaseName",
+    "source": "Enter the Odoo database name"
+  },
+  {
+    "key": "MessageEnterTheOdooUserLogin",
+    "source": "Enter the Odoo user login"
+  },
+  {
+    "key": "MessageEnterAnOdooUserAPIKey",
+    "source": "Enter an Odoo user API key"
+  },
+  {
+    "key": "MessageOdooConnectionRemoved",
+    "source": "Odoo connection removed"
+  },
+  {
+    "key": "MessageOdooConnectionUpdated",
+    "source": "Odoo connection updated"
+  },
+  {
+    "key": "MessageOdooResponseExceedsLimit",
+    "source": "Odoo response exceeds limit"
+  },
+  {
+    "key": "MessageOdooReturnedAnInvalidJSONResponse",
+    "source": "Odoo returned an invalid JSON response"
+  },
+  {
+    "key": "MessageOdooRejectedTheDatabaseLoginOrAPIKey",
+    "source": "Odoo rejected the database, login or API key"
+  },
+  {
+    "key": "MessageOdooReturnedAnInvalidEventDate",
+    "source": "Odoo returned an invalid event date"
+  },
+  {
+    "key": "MessageConfigureTheOdooConnectionFirst",
+    "source": "Configure the Odoo connection first"
+  },
+  {
+    "key": "MessageCannotOpenICSFile",
+    "source": "Cannot open ICS file"
+  },
+  {
+    "key": "MessageICSFileExceedsLimit",
+    "source": "ICS file exceeds limit"
+  },
+  {
+    "key": "MessageUnknownProviderKind",
+    "source": "Unknown provider kind"
+  },
+  {
+    "key": "MessageDPAPIEncryptionFailed",
+    "source": "DPAPI encryption failed"
+  },
+  {
+    "key": "MessageCannotPersistEncryptedCredential",
+    "source": "Cannot persist encrypted credential"
+  },
+  {
+    "key": "MessageMacOSKeychainWriteFailed",
+    "source": "macOS Keychain write failed"
+  },
+  {
+    "key": "MessageSecretServiceUnavailableUnlockYourDesktopKeyring",
+    "source": "Secret Service unavailable; unlock your desktop keyring"
+  },
+  {
+    "key": "MessageSecureCredentialStorageIsUnavailableOnThisBuild",
+    "source": "Secure credential storage is unavailable on this build"
+  },
+  {
+    "key": "MessageCannotReadEncryptedCredential",
+    "source": "Cannot read encrypted credential"
+  },
+  {
+    "key": "MessageDPAPIDecryptionFailed",
+    "source": "DPAPI decryption failed"
+  },
+  {
+    "key": "MessageMacOSKeychainReadFailed",
+    "source": "macOS Keychain read failed"
+  },
+  {
+    "key": "MessageSecretServiceUnavailable",
+    "source": "Secret Service unavailable"
+  },
+  {
+    "key": "MessageCannotRemoveEncryptedCredential",
+    "source": "Cannot remove encrypted credential"
+  },
+  {
+    "key": "MessageCannotRemoveCredentialFromKeyring",
+    "source": "Cannot remove credential from keyring"
+  },
+  {
+    "key": "MessageDatabaseIsNotAvailable",
+    "source": "Database is not available"
+  },
+  {
+    "key": "MessageDatabaseWasCreatedByANewerPluginRefusing",
+    "source": "Database was created by a newer plugin; refusing to modify it"
+  },
+  {
+    "key": "MessageExternalEventsAreReadOnly",
+    "source": "External events are read-only"
+  },
+  {
+    "key": "MessageRecurringEventsAreReadOnly",
+    "source": "Recurring events are read-only"
+  },
+  {
+    "key": "MessageRecurringEventsAreReadOnlyEditTheirRecurrence",
+    "source": "Recurring events are read-only; edit their recurrence rule"
+  },
+  {
+    "key": "MessageExternalAndRecurringEventsAreReadOnlyEdit",
+    "source": "External and recurring events are read-only; edit their source"
+  },
+  {
+    "key": "MessageCalendarIDsMustBeUnique",
+    "source": "Calendar IDs must be unique"
+  },
+  {
+    "key": "MessageInvalidCalendarProvider",
+    "source": "Invalid calendar provider"
+  },
+  {
+    "key": "MessageTheOdooCalendarIsManagedInSettings",
+    "source": "The Odoo calendar is managed in Settings"
+  },
+  {
+    "key": "MessageUnknownCalendarTimezone",
+    "source": "Unknown calendar timezone"
+  },
+  {
+    "key": "MessageICSURLMustUseHTTPS",
+    "source": "ICS URL must use HTTPS"
+  },
+  {
+    "key": "MessageDuplicateRecurrenceID",
+    "source": "Duplicate recurrence ID"
+  },
+  {
+    "key": "MessageDatetimeMustBeISO8601WithZOr",
+    "source": "Datetime must be ISO 8601 with Z or an explicit offset"
+  },
+  {
+    "key": "MessageInvalidLocalDateAndTime",
+    "source": "Invalid local date and time"
+  },
+  {
+    "key": "MessageThisLocalTimeDoesNotExistOnThis",
+    "source": "This local time does not exist on this device"
+  },
+  {
+    "key": "MessageInvalidActionOffset",
+    "source": "Invalid action offset"
+  },
+  {
+    "key": "MessageInvalidActionTypeOrReference",
+    "source": "Invalid action type or reference"
+  },
+  {
+    "key": "MessageTemplateNameIsRequired",
+    "source": "Template name is required"
+  },
+  {
+    "key": "MessageDuplicateActionID",
+    "source": "Duplicate action ID"
+  },
+  {
+    "key": "MessageTooManyActions",
+    "source": "Too many actions"
+  },
+  {
+    "key": "MessageEventRequiresTitleAndEndAfterStartMaximum",
+    "source": "Event requires title and end after start (maximum 366 days)"
+  },
+  {
+    "key": "MessageUnknownTimezone",
+    "source": "Unknown timezone"
+  },
+  {
+    "key": "MessageInvalidEventSource",
+    "source": "Invalid event source"
+  },
+  {
+    "key": "MessageEventNotFound",
+    "source": "Event not found"
+  },
+  {
+    "key": "MessageEventHasNoExternalProviderIdentity",
+    "source": "Event has no external provider identity"
+  },
+  {
+    "key": "MessageInvalidProviderIdentity",
+    "source": "Invalid provider identity"
+  },
+  {
+    "key": "MessageICSExpansionExceeds20000Occurrences",
+    "source": "ICS expansion exceeds 20000 occurrences"
+  },
+  {
+    "key": "MessageVEVENTIsMissingUID",
+    "source": "VEVENT is missing UID"
+  },
+  {
+    "key": "MessageICSExceeds8MiBLimit",
+    "source": "ICS exceeds 8 MiB limit"
+  },
+  {
+    "key": "MessageInvalidICalendarDocument",
+    "source": "Invalid iCalendar document"
+  },
+  {
+    "key": "MessageSubDailyICSExpansionIsNotSupportedCached",
+    "source": "Sub-daily ICS expansion is not supported; cached events preserved"
+  },
+  {
+    "key": "MessageRECURRENCEIDRANGEIsNotSupportedSyncRejected",
+    "source": "RECURRENCE-ID RANGE is not supported; sync rejected to preserve cached events"
+  },
+  {
+    "key": "MessageVEVENTIsMissingDTSTART",
+    "source": "VEVENT is missing DTSTART"
+  },
+  {
+    "key": "MessageTimedVEVENTRequiresDTENDOrDURATION",
+    "source": "Timed VEVENT requires DTEND or DURATION"
+  },
+  {
+    "key": "MessageInvalidAllDayDuration",
+    "source": "Invalid all-day duration"
+  },
+  {
+    "key": "MessageDuplicateUIDOccurrenceInICS",
+    "source": "Duplicate UID/occurrence in ICS"
+  },
+  {
+    "key": "MessageInvalidRRULE",
+    "source": "Invalid RRULE"
+  },
+  {
+    "key": "MessageRecurrenceMustBeDailyOrLessFrequent",
+    "source": "Recurrence must be daily or less frequent"
+  },
+  {
+    "key": "MessageGenerateAnAPITokenBeforeEnablingTheAPI",
+    "source": "Generate an API token before enabling the API"
+  },
+  {
+    "key": "MessageAPIHostMustBeANumericIPAddress",
+    "source": "API host must be a numeric IP address"
+  },
+  {
+    "key": "MessageTheAPIIsAvailableOnlyOnLocalhost127",
+    "source": "The API is available only on localhost (127.0.0.1 or ::1)"
+  },
+  {
+    "key": "MessageAPIPortMustBe102465535",
+    "source": "API port must be 1024–65535"
+  },
+  {
+    "key": "MessageAPIPortUnavailablePreviousConfigurationRemainsActive",
+    "source": "API port unavailable; previous configuration remains active"
+  },
+  {
+    "key": "MessagePreviousRecordingIsStillStopping",
+    "source": "Previous recording is still stopping"
+  },
+  {
+    "key": "MessageRecordingBelongsToTheOperatorLeftUnchanged",
+    "source": "Recording belongs to the operator; left unchanged"
+  },
+  {
+    "key": "MessageJoinedScheduledRecording",
+    "source": "Joined scheduled recording"
+  },
+  {
+    "key": "MessageJoinedPendingScheduledRecording",
+    "source": "Joined pending scheduled recording"
+  },
+  {
+    "key": "MessageRecordingStartRequested",
+    "source": "Recording start requested"
+  },
+  {
+    "key": "MessageThisEventDoesNotOwnTheRecording",
+    "source": "This event does not own the recording"
+  },
+  {
+    "key": "MessageRecordingInactive",
+    "source": "Recording inactive"
+  },
+  {
+    "key": "MessageEventFinishedOtherEventsStillNeedTheRecording",
+    "source": "Event finished; other events still need the recording"
+  },
+  {
+    "key": "MessageRecordingWillStopWhenOBSConfirmsItsPending",
+    "source": "Recording will stop when OBS confirms its pending start"
+  },
+  {
+    "key": "MessageRecordingIsInactiveOrBelongsToTheOperator",
+    "source": "Recording is inactive or belongs to the operator"
+  },
+  {
+    "key": "MessageRecordingStopRequested",
+    "source": "Recording stop requested"
+  },
+  {
+    "key": "MessageOnlyScheduledRecordingStartAndStopAreSupported",
+    "source": "Only scheduled recording start and stop are supported"
+  },
+  {
+    "key": "MessageOBSHasNotConfirmedRecordingStop",
+    "source": "OBS has not confirmed recording stop"
+  },
+  {
+    "key": "MessageOBSConfirmedRecordingStarted",
+    "source": "OBS confirmed recording started"
+  },
+  {
+    "key": "MessageOBSRecordingStarted",
+    "source": "OBS recording started"
+  },
+  {
+    "key": "MessageOBSStoppedBeforeConfirmingRecordingStart",
+    "source": "OBS stopped before confirming recording start"
+  },
+  {
+    "key": "MessageOBSConfirmedRecordingStopped",
+    "source": "OBS confirmed recording stopped"
+  },
+  {
+    "key": "MessageOBSRecordingStopped",
+    "source": "OBS recording stopped"
+  },
+  {
+    "key": "MessageOBSUnavailable",
+    "source": "OBS unavailable"
+  },
+  {
+    "key": "MessageRecordingStartWasMissed",
+    "source": "Recording start was missed"
+  },
+  {
+    "key": "MessageRecordingActionFailedInspectDiagnostics",
+    "source": "Recording action failed; inspect diagnostics"
+  },
+  {
+    "key": "MessageMethodOrOperationNotSupported",
+    "source": "Method or operation not supported"
+  },
+  {
+    "key": "MessageSucceeded",
+    "source": "succeeded"
+  },
+  {
+    "key": "MessageFailed",
+    "source": "failed"
+  },
+  {
+    "key": "MessageSkipped",
+    "source": "skipped"
+  },
+  {
+    "key": "MessageRequested",
+    "source": "requested"
+  },
+  {
+    "key": "MessageIndeterminate",
+    "source": "indeterminate"
+  },
+  {
+    "key": "MessageInfo",
+    "source": "info"
+  },
+  {
+    "key": "MessageError",
+    "source": "error"
+  },
+  {
+    "key": "MessageWarning",
+    "source": "warning"
+  },
+  {
+    "key": "MessageDebug",
+    "source": "debug"
+  },
+  {
+    "key": "MessageGoogleTokenRequestFailedReconnectTheAccountOr",
+    "source": "Google token request failed (%1); reconnect the account or check OAuth client configuration"
+  },
+  {
+    "key": "MessageGoogleOAuthTokenRequestFailed",
+    "source": "Google OAuth token request failed (%1)"
+  },
+  {
+    "key": "MessageCalendarHTTPRequestFailed",
+    "source": "Calendar HTTP request failed (%1)"
+  },
+  {
+    "key": "MessageOdooRequestFailed",
+    "source": "Odoo request failed (%1)"
+  },
+  {
+    "key": "MessageOdooRequestFailed2",
+    "source": "Odoo request failed: %1"
+  },
+  {
+    "key": "MessageSchedulerStoppedAfterInternalError",
+    "source": "Scheduler stopped after internal error: %1"
+  },
+  {
+    "key": "MessageUnknownICSTimezone",
+    "source": "Unknown ICS timezone: %1"
+  },
+  {
+    "key": "MessageCalendarSynchronizationFailed",
+    "source": "Calendar %1 synchronization failed: %2"
+  },
+  {
+    "key": "MessageCalendarSynchronized",
+    "source": "Calendar %1 synchronized"
+  },
+  {
+    "key": "MessageEventDeleted",
+    "source": "Event deleted: %1"
+  },
+  {
+    "key": "MessageExternalEventExcludedLocally",
+    "source": "External event excluded locally: %1"
+  },
+  {
+    "key": "MessageBroadcastSchedulerStarted",
+    "source": "Broadcast Scheduler %1 started"
+  },
+  {
+    "key": "MessageRecordStart",
+    "source": "%1 record.start %2"
+  },
+  {
+    "key": "MessageRecordStop",
+    "source": "%1 record.stop %2"
+  },
+  {
+    "key": "MessageOBSStartUnconfirmed",
+    "source": "OBS has not confirmed recording start"
+  },
+  {
+    "key": "MessageAwaitingOBSStart",
+    "source": "Recording start is unconfirmed; awaiting OBS"
+  },
+  {
+    "key": "MessageExistingSchedulePaused",
+    "source": "Existing schedule preserved and paused for review: every event now records from start to end"
+  },
+  {
+    "key": "MessageEventSaved",
+    "source": "Event saved: %1"
+  }
+]

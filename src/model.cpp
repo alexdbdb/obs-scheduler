@@ -10,6 +10,24 @@ QString iso(qint64 ms) {
   return QDateTime::fromMSecsSinceEpoch(ms, Qt::UTC)
       .toString(Qt::ISODateWithMs);
 }
+QString recordingFilename(const Event &event) {
+  auto title = event.title.simplified();
+  // OBS treats '%' as a filename-format token and the remaining characters
+  // are invalid on at least one supported desktop platform.
+  title.replace(QRegularExpression(R"([<>:"/\\|?*%\x00-\x1F\x7F])"), "_");
+  title.replace(QRegularExpression("_+"), "_");
+  while (title.endsWith('.') || title.endsWith(' '))
+    title.chop(1);
+  if (title.isEmpty())
+    title = "Event";
+  if (title.size() > 160)
+    title = title.left(160).trimmed();
+  const auto date = QDateTime::fromMSecsSinceEpoch(event.start, Qt::UTC)
+                        .toTimeZone(QTimeZone::systemTimeZone())
+                        .date()
+                        .toString("yyyy-MM-dd");
+  return date + " - " + title;
+}
 QDateTime instant(const QString &s) {
   const auto text = s.trimmed();
   static QRegularExpression offset("(Z|z|[+-][0-9]{2}:?[0-9]{2})$");
@@ -143,7 +161,8 @@ void Event::validate() const {
     throw Error("Event requires title and end after start (maximum 366 days)");
   if (!QTimeZone(timezone.toUtf8()).isValid())
     throw Error("Unknown timezone");
-  if (!QStringList{"Manual", "Recurring", "ICS", "GoogleCalendar", "API"}
+  if (!QStringList{"Manual", "Recurring", "ICS", "GoogleCalendar",
+                   "OdooEvent", "API"}
            .contains(source))
     throw Error("Invalid event source");
 }

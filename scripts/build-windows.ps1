@@ -1,13 +1,12 @@
 param(
   [string]$Configuration = 'Release',
   [string]$InstalledOBS = '',
-  [string]$GoogleClientFile = '',
   [switch]$SkipInstaller
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 $repo = Split-Path $PSScriptRoot -Parent
-if ($GoogleClientFile) { $GoogleClientFile = (Resolve-Path -LiteralPath $GoogleClientFile).Path }
+$version = '0.2.0-beta.1'
 $deps = Join-Path $repo '.deps'
 $prefix = Join-Path $deps 'sdk'
 New-Item -ItemType Directory -Force $deps, $prefix | Out-Null
@@ -103,18 +102,19 @@ if (!(Test-Path $sqlite)) { Archive 'https://www.sqlite.org/2025/sqlite-amalgama
 Run cmake @('-S',"$repo/cmake/sqlite",'-B',"$deps/sqlite-build",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DSQLITE_SOURCE_DIR=$sqlite", "-DCMAKE_INSTALL_PREFIX=$prefix")
 Run cmake @('--build',"$deps/sqlite-build")
 Run cmake @('--install',"$deps/sqlite-build")
+$testSource = Join-Path $deps 'qtbase-test'
+if (!(Test-Path $testSource)) {
+  Run git @('clone','--depth','1','--filter=blob:none','--sparse','--branch',"v$qtVersion",'https://github.com/qt/qtbase.git',$testSource)
+  Run git @('-C',$testSource,'sparse-checkout','set','src/testlib','LICENSES')
+} elseif (!(Test-Path "$testSource/LICENSES")) {
+  Run git @('-C',$testSource,'sparse-checkout','add','LICENSES')
+}
 if (!(Test-Path "$qt/lib/cmake/Qt6Test/Qt6TestConfig.cmake")) {
-  $testSource = Join-Path $deps 'qtbase-test'
-  if (!(Test-Path $testSource)) {
-    Run git @('clone','--depth','1','--filter=blob:none','--sparse','--branch',"v$qtVersion",'https://github.com/qt/qtbase.git',$testSource)
-    Run git @('-C',$testSource,'sparse-checkout','set','src/testlib')
-  }
   Run cmake @('-S',"$repo/cmake/qttest",'-B',"$deps/qttest-build",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$qt", "-DCMAKE_INSTALL_PREFIX=$qt", "-DQTBASE_TEST_SOURCE=$testSource", '-DQT_BUILD_TESTS=OFF','-DQT_BUILD_EXAMPLES=OFF')
   Run cmake @('--build',"$deps/qttest-build",'--parallel','4')
   Run cmake @('--install',"$deps/qttest-build")
 }
 $pluginArgs = @('-S',$repo,'-B',"$repo/build-windows",'-G','Ninja',"-DCMAKE_BUILD_TYPE=$Configuration", "-DCMAKE_PREFIX_PATH=$prefixes",'-DBUILD_TESTING=ON')
-$pluginArgs += "-DGOOGLE_OAUTH_CLIENT_FILE=$GoogleClientFile"
 if ($InstalledOBS) {
   $pluginArgs += @("-DOBS_INCLUDE=$obs/libobs", "-DOBS_FRONTEND_INCLUDE=$obs/frontend/api", "-DOBS_LIBRARY=$prefix/lib/obs.lib", "-DOBS_FRONTEND_LIBRARY=$prefix/lib/obs-frontend-api.lib", "-DCMAKE_CXX_FLAGS=/I`"$prefix/include`"")
 }
@@ -125,14 +125,20 @@ $zones = Get-ChildItem $prefix -Directory -Filter zoneinfo -Recurse | Select-Obj
 if (!$zones) { throw 'libical timezone data is missing' }
 $env:BS_ZONEINFO = $zones.FullName
 Run ctest @('--test-dir', "$repo/build-windows", '--output-on-failure', '-C', $Configuration)
-$stage = Join-Path $repo 'artifacts/windows'
+$stage = Join-Path $repo "artifacts/windows-$version"
+# Fresh staging prevents stale global OBS DLLs from entering a new package.
+if (Test-Path $stage) {
+  $stage = Join-Path $repo ("artifacts/windows-$version-" + [guid]::NewGuid().ToString('N'))
+}
 Run cmake @('--install',"$repo/build-windows",'--prefix',$stage)
-Copy-Item -Recurse -Force $zones.FullName "$stage/data/obs-plugins/broadcast-scheduler/"
-New-Item -ItemType Directory -Force "$stage/bin/64bit" | Out-Null
-foreach ($dll in @('Qt6HttpServer.dll','Qt6WebSockets.dll')) { Copy-Item "$qt/bin/$dll" "$stage/bin/64bit/" }
-Copy-Item "$repo/LICENSE", "$repo/THIRD_PARTY.md" "$stage/data/obs-plugins/broadcast-scheduler/"
-Copy-Item "$ical/LICENSE" "$stage/data/obs-plugins/broadcast-scheduler/LICENSE-libical"
-$notices = "$stage/data/obs-plugins/broadcast-scheduler/licenses"
+Copy-Item -Recurse -Force $zones.FullName "$stage/broadcast-scheduler/data/"
+New-Item -ItemType Directory -Force "$stage/broadcast-scheduler/bin/64bit" | Out-Null
+foreach ($dll in @('Qt6HttpServer.dll','Qt6WebSockets.dll')) { Copy-Item "$qt/bin/$dll" "$stage/broadcast-scheduler/bin/64bit/" }
+New-Item -ItemType Directory -Force "$stage/broadcast-scheduler/data/qt/tls" | Out-Null
+Copy-Item "$qt/plugins/tls/qschannelbackend.dll" "$stage/broadcast-scheduler/data/qt/tls/"
+Copy-Item "$repo/LICENSE", "$repo/THIRD_PARTY.md" "$stage/broadcast-scheduler/data/"
+Copy-Item "$ical/LICENSE" "$stage/broadcast-scheduler/data/LICENSE-libical"
+$notices = "$stage/broadcast-scheduler/data/licenses"
 New-Item -ItemType Directory -Force $notices | Out-Null
 Copy-Item "$repo/licenses/*" $notices
 Copy-Item "$ical/COPYING" "$notices/libical-COPYING.txt"
@@ -140,15 +146,22 @@ foreach ($moduleName in @('qthttpserver', 'qtwebsockets')) {
   New-Item -ItemType Directory -Force "$notices/$moduleName" | Out-Null
   Copy-Item "$deps/$moduleName/LICENSES/*" "$notices/$moduleName/"
 }
-Copy-Item "$repo/docs/source-distribution.md" "$stage/data/obs-plugins/broadcast-scheduler/SOURCES.md"
-if ($InstalledOBS) { Run python @("$repo/tests/windows_loader.py", $stage, $InstalledOBS) }
-Compress-Archive -Force "$stage/*" "$repo/artifacts/broadcast-scheduler-0.1.0-windows-x64.zip"
+New-Item -ItemType Directory -Force "$notices/qtbase" | Out-Null
+Copy-Item "$testSource/LICENSES/*" "$notices/qtbase/"
+Copy-Item "$repo/docs/source-distribution.md" "$stage/broadcast-scheduler/data/SOURCES.md"
+if ($InstalledOBS) { Run python @("$repo/tests/windows_loader.py", $stage, $InstalledOBS, "$repo/build-windows/package-probe.exe") }
+Compress-Archive -Force "$stage/*" "$repo/artifacts/broadcast-scheduler-$version-windows-x64.zip"
 if (!$SkipInstaller) {
   $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
   if (!$iscc) {
     throw 'Inno Setup 6 is required to create the user-friendly installer. Install it or pass -SkipInstaller.'
   }
-  Run $iscc.Source @('/Qp', (Join-Path $repo 'installer/BroadcastScheduler.iss'))
-  Write-Host "Installer ready: artifacts/Broadcast-Scheduler-0.1.0-Setup.exe"
+  Run $iscc.Source @('/Qp', "/DStageDir=$stage", "/DProductVersion=$version", (Join-Path $repo 'installer/BroadcastScheduler.iss'))
+  Write-Host "Installer ready: artifacts/Broadcast-Scheduler-$version-Setup.exe"
 }
-Write-Host "Package ready: artifacts/broadcast-scheduler-0.1.0-windows-x64.zip (Qt $qtVersion)"
+Write-Host "Package ready: artifacts/broadcast-scheduler-$version-windows-x64.zip (Qt $qtVersion)"
+
+Run python @("$repo/scripts/release-audit.py", '--package', "$repo/artifacts/broadcast-scheduler-$version-windows-x64.zip")
+$packages = @("$repo/artifacts/broadcast-scheduler-$version-windows-x64.zip")
+if (!$SkipInstaller) { $packages += "$repo/artifacts/Broadcast-Scheduler-$version-Setup.exe" }
+$packages | ForEach-Object { $h = Get-FileHash -LiteralPath $_ -Algorithm SHA256; "$($h.Hash.ToLower())  $([IO.Path]::GetFileName($_))" } | Set-Content "$repo/artifacts/SHA256SUMS-$version.txt" -Encoding ascii

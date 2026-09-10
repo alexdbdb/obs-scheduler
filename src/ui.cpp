@@ -1,4 +1,5 @@
 #include "ui.hpp"
+#include "messages.hpp"
 #include <QApplication>
 #include <QCheckBox>
 #include <QDateTimeEdit>
@@ -6,6 +7,7 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFile>
 #include <QFormLayout>
 #include <QHostAddress>
 #include <QHBoxLayout>
@@ -15,6 +17,9 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRegularExpressionValidator>
+#include <QShortcut>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTimer>
@@ -25,6 +30,21 @@
 namespace bs {
 QString tr(const char *key) { return QString::fromUtf8(obs_module_text(key)); }
 namespace {
+QString diagnostic(const QString &text) {
+  static const MessageCatalog catalog([] {
+    char *path = obs_module_file("messages.json");
+    if (!path)
+      return QJsonArray{};
+    QFile file(QString::fromUtf8(path));
+    bfree(path);
+    if (!file.open(QIODevice::ReadOnly))
+      return QJsonArray{};
+    return QJsonDocument::fromJson(file.readAll()).array();
+  }());
+  return catalog.translate(text, [](const QString &key) {
+    return bs::tr(key.toUtf8().constData());
+  });
+}
 template <typename Function>
 void runUiHandler(QWidget *parent, const char *context, Function &&function) {
   try {
@@ -32,7 +52,7 @@ void runUiHandler(QWidget *parent, const char *context, Function &&function) {
   } catch (const std::exception &e) {
     blog(LOG_ERROR, "[broadcast-scheduler] UI handler '%s' failed: %s", context,
          e.what());
-    QMessageBox::critical(parent, bs::tr("Error"), QString::fromUtf8(e.what()));
+    QMessageBox::critical(parent, bs::tr("Error"), diagnostic(QString::fromUtf8(e.what())));
   } catch (...) {
     blog(LOG_ERROR, "[broadcast-scheduler] UI handler '%s' failed with an unknown exception",
          context);
@@ -69,8 +89,13 @@ void row(QTableWidget *t, QStringList values, QString id = {}) {
 }
 QComboBox *combo(QStringList choices, QString selected) {
   auto *c = new QComboBox;
-  for (auto &s : choices)
-    c->addItem(bs::tr(s.toUtf8().constData()), s);
+  for (auto &s : choices) {
+    const auto key = s == "ics" ? QString("ProviderICS")
+                   : s == "file" ? QString("ProviderFile")
+                   : s == "google" ? QString("ProviderGoogle")
+                   : s == "odoo" ? QString("ProviderOdoo") : s;
+    c->addItem(bs::tr(key.toUtf8().constData()), s);
+  }
   int i = c->findData(selected);
   if (i >= 0)
     c->setCurrentIndex(i);
@@ -132,6 +157,7 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
   auto *ul = new QVBoxLayout(up);
   agenda = table({bs::tr("Title"), bs::tr("Start"), bs::tr("End"),
                   bs::tr("Source"), bs::tr("Enabled")});
+  agenda->setSelectionMode(QAbstractItemView::ExtendedSelection);
   ul->addWidget(agenda);
   auto *actions = new QHBoxLayout;
   ul->addLayout(actions);
@@ -155,13 +181,57 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
     if (!e.isEmpty())
       eventDialog(e, true);
   });
-  button(actions, "Delete", [this, selected] {
-    auto e = selected();
-    if (!e.isEmpty() &&
-        QMessageBox::question(this, bs::tr("Delete"), bs::tr("DeleteEvent")) ==
-            QMessageBox::Yes)
-      send("event.delete", e);
-  });
+  auto deleteSelected = [this] {
+    QList<QJsonObject> events;
+    for (auto &index : agenda->selectionModel()->selectedRows(0)) {
+      auto id = index.data(Qt::UserRole).toString();
+      for (auto value : current["events"].toArray()) {
+        auto event = value.toObject();
+        if (event["id"].toString() == id) {
+          events.append(event);
+          break;
+        }
+      }
+    }
+    if (events.isEmpty())
+      return;
+    int imported = 0;
+    for (auto &event : events) {
+      const bool writable = event["source"].toString() == "Manual" ||
+                            event["source"].toString() == "API";
+      const bool external = !event["source_calendar"].toString().isEmpty() &&
+                            !event["external_id"].toString().isEmpty();
+      if (!writable && !external) {
+        QMessageBox::information(this, bs::tr("Delete"),
+                                 bs::tr("ReadOnlyEvent"));
+        return;
+      }
+      if (external)
+        ++imported;
+    }
+    QString confirmation;
+    if (events.size() == 1)
+      confirmation = imported ? bs::tr("ExcludeExternalEvent")
+                              : bs::tr("DeleteEvent");
+    else if (imported == events.size())
+      confirmation = bs::tr("ExcludeExternalEvents");
+    else if (imported == 0)
+      confirmation = bs::tr("DeleteEvents");
+    else
+      confirmation = bs::tr("DeleteMixedEvents");
+    if (QMessageBox::question(this, bs::tr("Delete"), confirmation) !=
+        QMessageBox::Yes)
+      return;
+    for (auto &event : events)
+      send("event.delete", event);
+  };
+  button(actions, "Delete", deleteSelected);
+  auto *deleteShortcut = new QShortcut(QKeySequence::Delete, agenda);
+  deleteShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+  connect(deleteShortcut, &QShortcut::activated, this,
+          [this, deleteSelected] {
+            runUiHandler(this, "Delete", deleteSelected);
+          });
   tabs->addTab(up, bs::tr("Upcoming"));
   auto *cp = new QWidget;
   auto *cl = new QVBoxLayout(cp);
@@ -184,7 +254,7 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
     runUiHandler(this, "state", [this, data] { updateState(data); });
   });
   connect(runtime, &Runtime::problem, this,
-          [this](QString m) { QMessageBox::warning(this, bs::tr("Error"), m); });
+          [this](QString m) { QMessageBox::warning(this, bs::tr("Error"), diagnostic(m)); });
   connect(runtime, &Runtime::openUrl, this,
           [](QString u) { QDesktopServices::openUrl(QUrl(u)); });
   connect(runtime, &Runtime::tokenGenerated, this, [this](QString t) {
@@ -246,6 +316,75 @@ Dock::Dock(Runtime *r, QWidget *p) : QWidget(p), runtime(r) {
         out.append(c);
       }
       send("calendars.save", {{"items", out}});
+    }
+  });
+  connect(runtime, &Runtime::odooOptions, this, [this](QJsonObject options) {
+    QDialog dialog(QApplication::activeModalWidget()
+                       ? QApplication::activeModalWidget()
+                       : this);
+    dialog.setWindowTitle(bs::tr("OdooFilters"));
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *hint = new QLabel(bs::tr("OdooFiltersHelp"));
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
+    auto *filters = new QTabWidget;
+    layout->addWidget(filters);
+    const auto saved = current["odoo"].toObject();
+    auto selectionPage = [&](const char *title, const QJsonArray &values,
+                             const QJsonArray &selected) {
+      auto *tableWidget = table({bs::tr("Enabled"), bs::tr("Title")});
+      for (const auto value : values) {
+        const auto item = value.toObject();
+        row(tableWidget, {"", item["name"].toString()},
+            QString::number(item["id"].toInt()));
+        const bool checked = selected.isEmpty() || selected.contains(item["id"]);
+        tableWidget->setCellWidget(tableWidget->rowCount() - 1, 0,
+                                   check(checked));
+      }
+      filters->addTab(tableWidget, bs::tr(title));
+      return tableWidget;
+    };
+    auto *types = selectionPage("OdooEventTypes", options["types"].toArray(),
+                                saved["type_ids"].toArray());
+    auto *stages = selectionPage("OdooStages", options["stages"].toArray(),
+                                 saved["stage_ids"].toArray());
+    auto *statesPage = new QWidget;
+    auto *statesLayout = new QVBoxLayout(statesPage);
+    const auto selectedStates = saved["kanban_states"].toArray();
+    QList<QPair<QCheckBox *, QString>> states;
+    for (const auto &state : {QString("normal"), QString("done"),
+                              QString("blocked")}) {
+      auto *box = new QCheckBox(bs::tr(("OdooState_" + state).toUtf8().constData()));
+      box->setChecked(selectedStates.isEmpty() || selectedStates.contains(state));
+      statesLayout->addWidget(box);
+      states.append({box, state});
+    }
+    statesLayout->addStretch();
+    filters->addTab(statesPage, bs::tr("OdooStates"));
+    buttons(&dialog, layout);
+    dialog.resize(620, 430);
+    if (dialog.exec() == QDialog::Accepted) {
+      auto selectedIds = [](QTableWidget *widget) {
+        QJsonArray result;
+        for (int rowIndex = 0; rowIndex < widget->rowCount(); ++rowIndex)
+          if (static_cast<QCheckBox *>(widget->cellWidget(rowIndex, 0))->isChecked())
+            result.append(widget->item(rowIndex, 0)->data(Qt::UserRole).toString().toInt());
+        return result;
+      };
+      auto configuration = current["odoo"].toObject();
+      configuration.remove("configured");
+      configuration.remove("api_key_configured");
+      configuration.remove("storage_error");
+      configuration["type_ids"] = selectedIds(types);
+      configuration["stage_ids"] = selectedIds(stages);
+      QJsonArray selectedKanbanStates;
+      for (const auto &state : states)
+        if (state.first->isChecked())
+          selectedKanbanStates.append(state.second);
+      configuration["kanban_states"] = selectedKanbanStates;
+      configuration["filters_initialized"] = true;
+      send("odoo.configure", {{"configuration", configuration}});
+      send("sync");
     }
   });
   auto *refresh = new QTimer(this);
@@ -321,13 +460,13 @@ void Dock::updateState(QJsonObject data) {
         {h["title"].toString(), bs::tr(h["action"].toString().toUtf8().constData()),
          display(iso(qint64(h["scheduled"].toDouble())), zone),
          display(iso(qint64(h["actual"].toDouble())), zone),
-         h["result"].toString(), h["message"].toString()});
+         diagnostic(h["result"].toString()), diagnostic(h["message"].toString())});
   }
   logs->setRowCount(0);
   for (auto v : data["logs"].toArray()) {
     auto o = v.toObject();
     row(logs, {display(iso(qint64(o["time"].toDouble())), zone),
-               o["level"].toString(), o["message"].toString()});
+               diagnostic(o["level"].toString()), diagnostic(o["message"].toString())});
   }
   renderCalendar();
 }
@@ -437,7 +576,16 @@ void Dock::calendars() {
     row(t, {"", c["name"].toString(), "", c["location"].toString(), ""},
         c["id"].toString(uid()));
     t->setCellWidget(r, 0, check(c["enabled"].toBool(true)));
-    t->setCellWidget(r, 2, combo({"ics", "file", "google"}, c["kind"].toString("ics")));
+    const bool managedOdoo = c["kind"].toString() == "odoo";
+    t->setCellWidget(r, 2,
+                     combo(managedOdoo ? QStringList{"odoo"}
+                                       : QStringList{"ics", "file", "google"},
+                           c["kind"].toString("ics")));
+    if (managedOdoo) {
+      for (const int column : {1, 3})
+        t->item(r, column)->setFlags(t->item(r, column)->flags() &
+                                     ~Qt::ItemIsEditable);
+    }
     t->setCellWidget(r, 4, spin(c["refresh_minutes"].toInt(15), 1, 1440));
   };
   for (auto v : current["calendars"].toObject()["items"].toArray())
@@ -537,7 +685,7 @@ void Dock::recurrences() {
       send("recurrences.save", {{"items", out}});
       break;
     } catch (const std::exception &e) {
-      QMessageBox::warning(&d, bs::tr("Error"), QString::fromUtf8(e.what()));
+      QMessageBox::warning(&d, bs::tr("Error"), diagnostic(QString::fromUtf8(e.what())));
     }
   }
 }
@@ -550,7 +698,12 @@ void Dock::settings() {
   auto page = [&](const char *key) {
     auto *w = new QWidget;
     auto *f = new QFormLayout(w);
-    tabs->addTab(w, bs::tr(key));
+    f->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    auto *scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidget(w);
+    tabs->addTab(scroll, bs::tr(key));
     return f;
   };
   auto s = current["settings"].toObject();
@@ -564,16 +717,81 @@ void Dock::settings() {
   safety->setWordWrap(true);
   f->addRow(safety);
   f = page("Google");
+  const auto google = current["google"].toObject();
+  const auto storedGoogleClientId = google["client_id"].toString();
+  const bool storedGoogleClientSecret =
+      google["client_secret_configured"].toBool();
+  auto *googleClientId = new QLineEdit(google["client_id"].toString());
+  googleClientId->setPlaceholderText("000000000000-example.apps.googleusercontent.com");
+  googleClientId->setValidator(new QRegularExpressionValidator(
+      QRegularExpression("[A-Za-z0-9_.-]+\\.apps\\.googleusercontent\\.com"),
+      googleClientId));
+  f->addRow(bs::tr("ClientID"), googleClientId);
+  auto *googleClientSecret = new QLineEdit;
+  googleClientSecret->setEchoMode(QLineEdit::Password);
+  googleClientSecret->setPlaceholderText(
+      google["client_secret_configured"].toBool()
+          ? bs::tr("ClientSecretStored")
+          : "GOCSPX-…");
+  f->addRow(bs::tr("ClientSecret"), googleClientSecret);
   auto *googleState = new QLabel;
   googleState->setWordWrap(true);
   f->addRow(googleState);
   auto *googleHelp = new QLabel(bs::tr("GoogleConnectHelp"));
   googleHelp->setWordWrap(true);
   f->addRow(googleHelp);
+  auto *googleGuide = new QLabel(bs::tr("GoogleSetupGuide"));
+  googleGuide->setTextFormat(Qt::RichText);
+  googleGuide->setTextInteractionFlags(Qt::TextBrowserInteraction);
+  googleGuide->setOpenExternalLinks(false);
+  googleGuide->setWordWrap(true);
+  connect(googleGuide, &QLabel::linkActivated, googleGuide,
+          [this](const QString &link) {
+            const QUrl url(link);
+            if (url.scheme() != "https" || !QDesktopServices::openUrl(url))
+              QMessageBox::warning(this, bs::tr("Google"),
+                                   bs::tr("LinkOpenFailed"));
+          });
+  f->addRow(googleGuide);
   auto *googleButtons = new QHBoxLayout;
   f->addRow(googleButtons);
-  auto *connectGoogle = button(googleButtons, "ConnectGoogle", [this] {
-    if (current["google"].toObject()["connected"].toBool()) {
+  auto configureGoogle = [this, googleClientId, googleClientSecret](bool required) {
+    const auto clientId = googleClientId->text().trimmed();
+    const auto clientSecret = googleClientSecret->text().trimmed();
+    const auto status = current["google"].toObject();
+    const bool idChanged = clientId != status["client_id"].toString();
+    const bool hasSecret = !clientSecret.isEmpty() ||
+                           (!idChanged && status["client_secret_configured"].toBool());
+    if ((required && clientId.isEmpty()) ||
+        (!clientId.isEmpty() && !googleClientId->hasAcceptableInput())) {
+      QMessageBox::warning(this, bs::tr("Google"),
+                           bs::tr("InvalidGoogleClientID"));
+      return false;
+    }
+    if (required && !hasSecret) {
+      QMessageBox::warning(this, bs::tr("Google"),
+                           bs::tr("MissingGoogleClientSecret"));
+      return false;
+    }
+    if (idChanged || !clientSecret.isEmpty()) {
+      if (status["connected"].toBool() &&
+          QMessageBox::question(this, bs::tr("ChangeGoogleClientID"),
+                                bs::tr("ChangeGoogleClientIDHelp")) !=
+              QMessageBox::Yes)
+        return false;
+      send("google.configure", {{"client_id", clientId},
+                                {"client_secret", clientSecret}});
+    }
+    return true;
+  };
+  auto *connectGoogle = button(googleButtons, "ConnectGoogle", [this, googleClientId, googleClientSecret, configureGoogle] {
+    const auto status = current["google"].toObject();
+    const bool changed = googleClientId->text().trimmed() !=
+                             status["client_id"].toString() ||
+                         !googleClientSecret->text().trimmed().isEmpty();
+    if (!configureGoogle(true))
+      return;
+    if (status["connected"].toBool() && !changed) {
       if (QMessageBox::question(this, bs::tr("ChangeGoogleAccount"),
             bs::tr("ChangeGoogleAccountHelp")) != QMessageBox::Yes) return;
       send("google.disconnect");
@@ -582,23 +800,150 @@ void Dock::settings() {
   });
   auto *disconnectGoogle = button(googleButtons, "Disconnect", [this] { send("google.disconnect"); });
   auto *chooseGoogle = button(googleButtons, "GoogleCalendars", [this] { send("google.list"); });
-  auto updateGoogle = [googleState, connectGoogle, disconnectGoogle, chooseGoogle](QJsonObject data) {
+  auto updateGoogle = [googleState, googleClientId, googleClientSecret, connectGoogle,
+                       disconnectGoogle, chooseGoogle](QJsonObject data) {
     const auto g = data["google"].toObject();
     const bool configured = g["configured"].toBool();
     const bool connected = g["connected"].toBool();
     const bool connecting = g["connecting"].toBool();
     googleState->setText(bs::tr(!configured ? "GoogleNotConfigured" : g["storage_error"].toBool() ? "GoogleStorageError" : connecting ? "GoogleConnecting" : connected ? "GoogleConnected" : "GoogleDisconnected"));
     connectGoogle->setText(bs::tr(connected ? "ChangeGoogleAccount" : "ConnectGoogle"));
-    connectGoogle->setEnabled(configured && !connecting);
+    connectGoogle->setEnabled(!connecting &&
+                              !googleClientId->text().trimmed().isEmpty() &&
+                              googleClientId->hasAcceptableInput() &&
+                              (g["client_secret_configured"].toBool() ||
+                               !googleClientSecret->text().trimmed().isEmpty()));
     disconnectGoogle->setText(bs::tr(connecting ? "CancelGoogleConnection" : "Disconnect"));
     disconnectGoogle->setEnabled(connected || connecting);
     chooseGoogle->setEnabled(connected && !connecting);
   };
   connect(runtime, &Runtime::state, &d, updateGoogle);
+  connect(googleClientId, &QLineEdit::textChanged, &d,
+          [googleClientId, googleClientSecret, connectGoogle,
+           storedGoogleClientId, storedGoogleClientSecret](const QString &) {
+            const bool hasSecret = !googleClientSecret->text().trimmed().isEmpty() ||
+                (googleClientId->text().trimmed() == storedGoogleClientId &&
+                 storedGoogleClientSecret);
+            connectGoogle->setEnabled(
+                !googleClientId->text().trimmed().isEmpty() &&
+                googleClientId->hasAcceptableInput() &&
+                hasSecret);
+          });
+  connect(googleClientSecret, &QLineEdit::textChanged, &d,
+          [googleClientId, googleClientSecret, connectGoogle,
+           storedGoogleClientId, storedGoogleClientSecret](const QString &) {
+            const bool hasSecret = !googleClientSecret->text().trimmed().isEmpty() ||
+                (googleClientId->text().trimmed() == storedGoogleClientId &&
+                 storedGoogleClientSecret);
+            connectGoogle->setEnabled(
+                !googleClientId->text().trimmed().isEmpty() &&
+                googleClientId->hasAcceptableInput() &&
+                hasSecret);
+          });
   updateGoogle(current);
+  f = page("Odoo");
+  const auto odoo = current["odoo"].toObject();
+  auto *odooEnabled = check(odoo["enabled"].toBool(true));
+  auto *odooUrl = new QLineEdit(odoo["url"].toString());
+  odooUrl->setPlaceholderText("https://odoo.example.com");
+  auto *odooDatabase = new QLineEdit(odoo["database"].toString());
+  auto *odooLogin = new QLineEdit(odoo["login"].toString());
+  auto *odooProtocol = combo({"jsonrpc", "json2"},
+                             odoo["protocol"].toString("jsonrpc"));
+  auto *odooApiKey = new QLineEdit;
+  odooApiKey->setEchoMode(QLineEdit::Password);
+  odooApiKey->setPlaceholderText(
+      odoo["api_key_configured"].toBool()
+          ? bs::tr("ApiKeyStored")
+          : bs::tr("OdooApiKeyPlaceholder"));
+  auto *odooRefresh = spin(odoo["refresh_minutes"].toInt(15), 1, 1440);
+  f->addRow(bs::tr("Enabled"), odooEnabled);
+  f->addRow(bs::tr("OdooURL"), odooUrl);
+  f->addRow(bs::tr("OdooDatabase"), odooDatabase);
+  f->addRow(bs::tr("OdooLogin"), odooLogin);
+  f->addRow(bs::tr("OdooProtocol"), odooProtocol);
+  f->addRow(bs::tr("OdooApiKey"), odooApiKey);
+  f->addRow(bs::tr("RefreshMinutes"), odooRefresh);
+  auto *odooHelp = new QLabel(bs::tr("OdooConnectHelp"));
+  odooHelp->setWordWrap(true);
+  f->addRow(odooHelp);
+  auto *odooState = new QLabel;
+  odooState->setWordWrap(true);
+  f->addRow(odooState);
+  auto odooConfiguration = [=] {
+    QJsonObject configuration = odoo;
+    configuration.remove("configured");
+    configuration.remove("api_key_configured");
+    configuration.remove("storage_error");
+    configuration["url"] = odooUrl->text().trimmed();
+    configuration["database"] = odooDatabase->text().trimmed();
+    configuration["login"] = odooLogin->text().trimmed();
+    configuration["protocol"] = odooProtocol->currentData().toString();
+    configuration["enabled"] = odooEnabled->isChecked();
+    configuration["refresh_minutes"] = odooRefresh->value();
+    return configuration;
+  };
+  auto configureOdoo = [this, odoo, odooApiKey, odooConfiguration](bool required) {
+    const auto configuration = odooConfiguration();
+    if (!required && configuration["url"].toString().isEmpty() &&
+        odoo["url"].toString().isEmpty() &&
+        odooApiKey->text().trimmed().isEmpty())
+      return true;
+    const bool legacy = configuration["protocol"].toString() == "jsonrpc";
+    if (required && (configuration["url"].toString().isEmpty() ||
+                     configuration["database"].toString().isEmpty() ||
+                     (legacy && configuration["login"].toString().isEmpty()))) {
+      QMessageBox::warning(this, bs::tr("Odoo"), bs::tr("InvalidOdooSettings"));
+      return false;
+    }
+    const bool identityChanged = configuration["url"] != odoo["url"] ||
+        configuration["database"] != odoo["database"] ||
+        configuration["login"] != odoo["login"] ||
+        configuration["protocol"] != odoo["protocol"];
+    if (required && odooApiKey->text().trimmed().isEmpty() &&
+        (identityChanged || !odoo["api_key_configured"].toBool())) {
+      QMessageBox::warning(this, bs::tr("Odoo"), bs::tr("MissingOdooApiKey"));
+      return false;
+    }
+    QJsonObject comparable = odoo;
+    comparable.remove("configured");
+    comparable.remove("api_key_configured");
+    comparable.remove("storage_error");
+    if (configuration != comparable || !odooApiKey->text().trimmed().isEmpty())
+      send("odoo.configure", {{"configuration", configuration},
+                              {"api_key", odooApiKey->text().trimmed()}});
+    return true;
+  };
+  auto *odooButtons = new QHBoxLayout;
+  f->addRow(odooButtons);
+  auto *connectOdoo = button(odooButtons, "ConnectOdoo", [this, configureOdoo] {
+    if (configureOdoo(true))
+      send("odoo.list");
+  });
+  auto *disconnectOdoo = button(odooButtons, "Disconnect", [this] {
+    send("odoo.disconnect");
+  });
+  auto updateOdoo = [odooState, connectOdoo, disconnectOdoo](QJsonObject data) {
+    const auto status = data["odoo"].toObject();
+    odooState->setText(bs::tr(status["storage_error"].toBool()
+                                  ? "OdooStorageError"
+                                  : status["configured"].toBool()
+                                        ? "OdooConfigured"
+                                        : "OdooNotConfigured"));
+    disconnectOdoo->setEnabled(!status["url"].toString().isEmpty() ||
+                               status["api_key_configured"].toBool());
+    connectOdoo->setEnabled(!status["storage_error"].toBool());
+  };
+  connect(runtime, &Runtime::state, &d, updateOdoo);
+  updateOdoo(current);
   f = page("API");
   auto *apiEnabled = check(s["api_enabled"].toBool());
   auto *host = new QLineEdit(s["api_host"].toString("127.0.0.1"));
+  host->setText("127.0.0.1");
+  host->setReadOnly(true);
+  auto *apiHelp = new QLabel(bs::tr("ApiLocalOnly"));
+  apiHelp->setWordWrap(true);
+  f->addRow(apiHelp);
   auto *port = spin(s["api_port"].toInt(8766), 1024, 65535);
   f->addRow(bs::tr("Enabled"), apiEnabled);
   f->addRow(bs::tr("Host"), host);
@@ -608,6 +953,7 @@ void Dock::settings() {
   connect(token, &QPushButton::clicked, this,
           [this] { send("token.generate"); });
   f = page("Diagnostics");
+  f->addRow(bs::tr("Version"), new QLabel(PLUGIN_VERSION));
   auto *db = new QLineEdit(current["database"].toString());
   db->setReadOnly(true);
   f->addRow(bs::tr("Database"), db);
@@ -620,18 +966,15 @@ void Dock::settings() {
   buttons(&d, l);
   d.resize(660, 440);
   if (d.exec() == QDialog::Accepted) {
-    bool network = !QHostAddress(host->text()).isLoopback();
-    if (apiEnabled->isChecked() && network &&
-        QMessageBox::warning(this, bs::tr("API"), bs::tr("NetworkWarning"),
-                             QMessageBox::Yes | QMessageBox::No,
-                             QMessageBox::No) != QMessageBox::Yes)
+    if (!configureGoogle(false))
+      return;
+    if (!configureOdoo(false))
       return;
     send("settings.save",
          {{"enabled", enabled->isChecked()},
           {"api_enabled", apiEnabled->isChecked()},
           {"api_host", host->text()},
-          {"api_port", port->value()},
-          {"api_network_acknowledged", network}});
+          {"api_port", port->value()}});
   }
 }
 } // namespace bs

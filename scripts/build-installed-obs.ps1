@@ -1,4 +1,4 @@
-param([string]$OBSPath = 'C:\Program Files\obs-studio', [string]$GoogleClientFile = '')
+param([string]$OBSPath = 'C:\Program Files\obs-studio')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -15,5 +15,5 @@ foreach ($line in $environment) {
 $cmakeTools = Join-Path $vs 'Common7/IDE/CommonExtensions/Microsoft/CMake'
 $env:VSLANG = '1033'
 $env:Path = "$repo/.deps/build-tools/cmake/data/bin;$cmakeTools/CMake/bin;$cmakeTools/Ninja;${env:ProgramFiles}/Inno Setup 6;${env:ProgramFiles(x86)}/Inno Setup 6;${env:LOCALAPPDATA}/Programs/Inno Setup 6;$env:Path;C:/Program Files/Git/usr/bin"
-& "$PSScriptRoot/build-windows.ps1" -InstalledOBS $OBSPath -GoogleClientFile $GoogleClientFile
+& "$PSScriptRoot/build-windows.ps1" -InstalledOBS $OBSPath
 exit 0
