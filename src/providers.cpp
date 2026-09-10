@@ -790,7 +790,12 @@ void Providers::odooPage(QJsonObject calendar, int offset, QList<Event> events,
               text + "Z", "yyyy-MM-dd HH:mm:ss'Z'");
           if (!date.isValid())
             throw Error("Odoo returned an invalid event date");
-          return QDateTime(date.date(), date.time(), QTimeZone::UTC)
+          // QTimeZone::UTC was introduced after the oldest Qt version
+          // supported by the Linux build image. Constructing the zone by
+          // name keeps this compatible with Qt 6.4+ while preserving the
+          // intended UTC interpretation of Odoo's naive datetime values.
+          return QDateTime(date.date(), date.time(),
+                           QTimeZone(QByteArrayLiteral("UTC")))
               .toMSecsSinceEpoch();
         };
         event.start = parseOdooDate(row["date_begin"].toString());
