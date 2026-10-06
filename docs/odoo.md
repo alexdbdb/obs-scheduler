@@ -25,7 +25,7 @@ The API key is encrypted using the operating system's protected credential stora
 
 ## Synchronization behavior
 
-The plugin reads active events whose dates overlap a rolling range from now through seven days ahead. Events that began earlier but are still in progress are included. Synchronization runs when OBS opens and then at the configured interval, so the seven-day horizon advances automatically without accumulating a large calendar. Results are paginated up to 5,000 events. Dates returned by Odoo are interpreted as UTC, matching Odoo's external API representation, and displayed in the OBS computer's local timezone.
+The plugin reads active events whose dates overlap a rolling range from now through seven days ahead. Recording starts at the custom `event.event.web_show_time` field and stops at `date_end`; the Odoo server must provide `web_show_time` as a Datetime. Events whose show time has passed but whose end is still in the future are included. Synchronization runs when OBS opens and then at the configured interval, so the seven-day horizon advances automatically without accumulating a large calendar. Results are paginated up to 5,000 events. Dates returned by Odoo are interpreted as UTC, matching Odoo's external API representation, and displayed in the OBS computer's local timezone.
 
 The filter dialog reads event types and stages from Odoo. All options are selected the first time. Once filters are saved, clearing every option in any one group intentionally imports no events. The three Odoo kanban values are in progress (`normal`), ready for the next stage (`done`) and blocked (`blocked`).
 

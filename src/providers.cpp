@@ -751,7 +751,7 @@ void Providers::odooPage(QJsonObject calendar, int offset, QList<Event> events,
   QJsonArray domain{
       QJsonArray{"active", "=", true},
       QJsonArray{"date_end", ">=", QDateTime::fromMSecsSinceEpoch(windowStart, Qt::UTC).toString("yyyy-MM-dd HH:mm:ss")},
-      QJsonArray{"date_begin", "<=", QDateTime::fromMSecsSinceEpoch(windowStart + providerWindow, Qt::UTC).toString("yyyy-MM-dd HH:mm:ss")}};
+      QJsonArray{"web_show_time", "<=", QDateTime::fromMSecsSinceEpoch(windowStart + providerWindow, Qt::UTC).toString("yyyy-MM-dd HH:mm:ss")}};
   const bool filtersInitialized = config["filters_initialized"].toBool();
   for (const auto pair : {qMakePair(QString("event_type_id"), config["type_ids"].toArray()),
                           qMakePair(QString("stage_id"), config["stage_ids"].toArray()),
@@ -761,13 +761,13 @@ void Providers::odooPage(QJsonObject calendar, int offset, QList<Event> events,
     else if (filtersInitialized)
       domain.append(QJsonArray{"id", "=", false});
   }
-  const QJsonArray fields{"id", "name", "description", "date_begin", "date_end",
+  const QJsonArray fields{"id", "name", "description", "web_show_time", "date_end",
                           "date_tz", "event_type_id", "stage_id", "kanban_state", "write_date"};
   QJsonArray arguments;
   arguments.append(domain);
   odooCall("event.event", "search_read", arguments,
            {{"fields", fields}, {"limit", 500}, {"offset", offset},
-            {"order", "date_begin,id"}},
+            {"order", "web_show_time,id"}},
            [this, calendar, offset, events, windowStart](QJsonValue result, QString error) mutable {
     if (!error.isEmpty()) {
       complete(calendar, {}, error);
@@ -798,7 +798,7 @@ void Providers::odooPage(QJsonObject calendar, int offset, QList<Event> events,
                            QTimeZone(QByteArrayLiteral("UTC")))
               .toMSecsSinceEpoch();
         };
-        event.start = parseOdooDate(row["date_begin"].toString());
+        event.start = parseOdooDate(row["web_show_time"].toString());
         event.end = parseOdooDate(row["date_end"].toString());
         event.timezone = row["date_tz"].toString("UTC");
         if (!QTimeZone(event.timezone.toUtf8()).isValid())
