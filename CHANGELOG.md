@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3 — Odoo recording start time
+
+- Start recordings imported from Odoo at `web_show_time` instead of `date_begin`.
+- Use `web_show_time` for the seven-day import window and event ordering; stop recordings at `date_end` as before.
+
 ## 0.2.2 — restore excluded events
 
 - Added an Excluded events tab with calendar, source ID and exclusion date.
